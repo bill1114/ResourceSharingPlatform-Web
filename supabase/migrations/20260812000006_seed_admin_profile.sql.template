@@ -1,0 +1,12 @@
+-- 這個檔案是「範本」，不是自動遷移檔（副檔名故意用 .sql.template，不會被 CLI 自動當成
+-- migration 執行）。請把下面 YOUR_USER_UUID_HERE 換成您在 Authentication → Users 建立
+-- admin@local.invalid 帳號後複製到的 User UID，再貼到 SQL Editor 執行一次。
+
+insert into profiles (id, username, display_name, role_name, is_active)
+values (
+    'YOUR_USER_UUID_HERE',  -- 換成剛剛複製的 User UID
+    'admin',
+    '系統管理員',
+    'Admin',
+    true
+);

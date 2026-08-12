@@ -1,121 +1,71 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { Route, Routes } from 'react-router-dom'
+import { AppShell } from './components/AppShell'
+import { Placeholder } from './components/Placeholder'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { RoleGate } from './components/RoleGate'
+import { Login } from './pages/Login'
+import { Roles } from './lib/enums'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <ProtectedRoute>
+            <AppShell />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/" element={<Placeholder title="戰情總覽" />} />
+        <Route path="/map" element={<Placeholder title="據點地圖" />} />
+        <Route path="/supply-items" element={<Placeholder title="物資管理" />} />
+        <Route path="/supply-locations" element={<Placeholder title="據點管理" />} />
+        <Route path="/transfers/create" element={<Placeholder title="物資轉移" />} />
+        <Route path="/transfers" element={<Placeholder title="轉移紀錄" />} />
+        <Route path="/outbound/create" element={<Placeholder title="物資出庫" />} />
+        <Route path="/outbound" element={<Placeholder title="出庫紀錄" />} />
+        <Route path="/outbound/recipient-analysis" element={<Placeholder title="領取分析" />} />
+        <Route path="/donations/create" element={<Placeholder title="物資捐贈" />} />
+        <Route path="/donations" element={<Placeholder title="捐贈紀錄" />} />
+        <Route path="/disposals/create" element={<Placeholder title="物資報廢" />} />
+        <Route path="/disposals" element={<Placeholder title="報廢紀錄" />} />
+        <Route path="/ai-stockin/create" element={<Placeholder title="AI 智慧入庫" />} />
+        <Route path="/ai-stockin" element={<Placeholder title="AI 辨識紀錄" />} />
+        <Route
+          path="/admin/accounts"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <Placeholder title="帳號管理" />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="/admin/inventory-types"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <Placeholder title="庫存種類設定" />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="/admin/line-settings"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <Placeholder title="LINE 通知設定" />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="/admin/ai-settings"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <Placeholder title="AI 智慧入庫設定" />
+            </RoleGate>
+          }
+        />
+      </Route>
+    </Routes>
   )
 }
 
