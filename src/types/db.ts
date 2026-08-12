@@ -27,3 +27,52 @@ export interface SupplyLocation {
   created_at: string
   updated_at: string | null
 }
+
+export interface InventoryItemDefinition {
+  id: number
+  category: string
+  item_name: string
+  unit: string
+  global_safety_stock: number
+  stock_type: string
+  is_active: boolean
+  created_at: string
+  updated_at: string | null
+}
+
+export interface InventoryItemVariant {
+  id: number
+  inventory_item_definition_id: number
+  specification: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string | null
+}
+
+export interface LocationInventorySafetyStock {
+  id: number
+  location_id: number
+  inventory_item_definition_id: number
+  safety_stock: number
+  created_at: string
+  updated_at: string | null
+}
+
+export interface SupplyItem {
+  id: number
+  category: string
+  item_name: string
+  specification: string | null
+  quantity: number
+  unit: string | null
+  stock_type: string
+  expiration_date: string | null
+  image_path: string | null
+  inventory_item_variant_id: number | null
+  location_id: number
+  safety_stock: number
+  remark: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string | null
+}

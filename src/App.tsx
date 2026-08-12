@@ -4,6 +4,9 @@ import { Placeholder } from './components/Placeholder'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { RoleGate } from './components/RoleGate'
 import { Login } from './pages/Login'
+import { SupplyLocations } from './pages/SupplyLocations'
+import { SupplyItems } from './pages/SupplyItems'
+import { InventoryTypes } from './pages/InventoryTypes'
 import { Roles } from './lib/enums'
 
 function App() {
@@ -19,8 +22,8 @@ function App() {
       >
         <Route path="/" element={<Placeholder title="戰情總覽" />} />
         <Route path="/map" element={<Placeholder title="據點地圖" />} />
-        <Route path="/supply-items" element={<Placeholder title="物資管理" />} />
-        <Route path="/supply-locations" element={<Placeholder title="據點管理" />} />
+        <Route path="/supply-items" element={<SupplyItems />} />
+        <Route path="/supply-locations" element={<SupplyLocations />} />
         <Route path="/transfers/create" element={<Placeholder title="物資轉移" />} />
         <Route path="/transfers" element={<Placeholder title="轉移紀錄" />} />
         <Route path="/outbound/create" element={<Placeholder title="物資出庫" />} />
@@ -44,7 +47,7 @@ function App() {
           path="/admin/inventory-types"
           element={
             <RoleGate roles={[Roles.Admin]}>
-              <Placeholder title="庫存種類設定" />
+              <InventoryTypes />
             </RoleGate>
           }
         />
