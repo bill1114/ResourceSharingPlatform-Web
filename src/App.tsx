@@ -12,6 +12,7 @@ import { SupplyMap } from './pages/SupplyMap'
 import { SupplyOutboundCreate, SupplyOutboundIndex } from './pages/SupplyOutbound'
 import { SupplyDonationCreate, SupplyDonationIndex } from './pages/SupplyDonation'
 import { SupplyDisposalCreate, SupplyDisposalIndex } from './pages/SupplyDisposal'
+import { SupplyTransferCreate, SupplyTransferIndex } from './pages/SupplyTransfer'
 import { Roles } from './lib/enums'
 
 function App() {
@@ -29,8 +30,15 @@ function App() {
         <Route path="/map" element={<SupplyMap />} />
         <Route path="/supply-items" element={<SupplyItems />} />
         <Route path="/supply-locations" element={<SupplyLocations />} />
-        <Route path="/transfers/create" element={<Placeholder title="物資轉移" />} />
-        <Route path="/transfers" element={<Placeholder title="轉移紀錄" />} />
+        <Route
+          path="/transfers/create"
+          element={
+            <RoleGate roles={[Roles.Admin, Roles.Cadre]}>
+              <SupplyTransferCreate />
+            </RoleGate>
+          }
+        />
+        <Route path="/transfers" element={<SupplyTransferIndex />} />
         <Route path="/outbound/create" element={<SupplyOutboundCreate />} />
         <Route path="/outbound" element={<SupplyOutboundIndex />} />
         <Route path="/outbound/recipient-analysis" element={<Placeholder title="領取分析" />} />

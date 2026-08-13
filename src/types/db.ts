@@ -93,6 +93,21 @@ export interface SupplyDisposalLog {
   remark: string | null
 }
 
+export interface SupplyTransferLog {
+  id: number
+  batch_id: string
+  supply_item_id: number
+  from_location_id: number
+  to_location_id: number
+  transfer_quantity: number
+  transfer_time: string
+  status: string
+  confirmed_by: string | null
+  confirmed_at: string | null
+  operator: string | null
+  remark: string | null
+}
+
 export interface SupplyItem {
   id: number
   category: string
