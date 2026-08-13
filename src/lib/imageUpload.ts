@@ -1,17 +1,34 @@
 // Port of SupplyItemController.SaveImageAsync's naming convention:
 // {種類}-{名稱}-{規格}-{數量}-{日期}-{流水號}.{副檔名}, e.g.
 // 食品-飲用水-600ml-250-20260809-001.png — see migration plan §六.
+//
+// DEVIATION FROM THE PLAN, discovered via a live test (2026-08-13): Supabase
+// Storage object keys reject non-ASCII characters outright (confirmed via a
+// direct API call — a pure-Chinese key returns 400 InvalidKey; an ASCII key
+// passes validation). The .NET app's filenames embed raw Chinese text
+// (物資種類-物資名稱-規格-...), which the Windows filesystem allows but
+// Supabase Storage's key validator does not. Since almost every
+// category/item_name/specification value in this app IS Chinese text with no
+// ASCII fallback, "sanitize and keep the Chinese" (the .NET approach) isn't
+// viable here — instead this strips non-ASCII characters, and always
+// includes the numeric inventory_item_definition id so the filename stays
+// unique/traceable even when every text field gets stripped down to nothing
+// (the common case). The human-readable category/name/spec is still recorded
+// properly in supply_item's own columns; the filename no longer needs to
+// duplicate it verbatim now that files are browsed through the app, not a
+// Windows folder.
 import { supabase } from './supabaseClient'
 
-// Port of SupplyItemController.SanitizeForFileName: strip filesystem-illegal
-// characters, replace literal '-' with '_' so it can't collide with the
-// naming convention's own '-' field separators. Chinese characters pass
-// through untouched.
+// Keeps only ASCII letters/digits (Chinese and other non-ASCII text is
+// dropped, not replaced by a placeholder) and collapses everything else to
+// '_'. Different from the .NET SanitizeForFileName (which only stripped
+// filesystem-illegal characters and kept Chinese) precisely because of the
+// Supabase Storage key restriction described above.
 export function sanitizeForFileName(value: string | null | undefined): string {
   if (!value) return ''
-  // eslint-disable-next-line no-control-regex
-  const illegal = /[\x00-\x1f<>:"/\\|?*]/g
-  return value.replace(illegal, '_').replace(/-/g, '_')
+  return value
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
 }
 
 function pad3(n: number): string {
@@ -34,20 +51,18 @@ async function nextSequence(bucket: string, prefix: string): Promise<number> {
 
 export async function uploadItemPhoto(
   file: File,
-  fields: { category: string; itemName: string; specification: string | null; quantity: number }
+  fields: { definitionId: number; category: string; itemName: string; specification: string | null; quantity: number }
 ): Promise<{ path: string; error: string | null }> {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png'
-  const dateStr = new Date()
-    .toISOString()
-    .slice(0, 10)
-    .replace(/-/g, '')
-  const parts = [
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+
+  const asciiParts = [
     sanitizeForFileName(fields.category),
     sanitizeForFileName(fields.itemName),
-    sanitizeForFileName(fields.specification || '無規格'),
-    fields.quantity.toString(),
-    dateStr,
+    sanitizeForFileName(fields.specification),
   ].filter(Boolean)
+
+  const parts = [`def${fields.definitionId}`, ...asciiParts, fields.quantity.toString(), dateStr]
   const prefix = parts.join('-')
 
   const seq = await nextSequence('items', prefix)

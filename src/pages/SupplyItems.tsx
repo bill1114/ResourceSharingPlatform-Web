@@ -127,6 +127,7 @@ export function SupplyItems() {
     let imagePath: string | null = null
     if (photoFile) {
       const { path, error: uploadError } = await uploadItemPhoto(photoFile, {
+        definitionId: catalog.currentDefinition.id,
         category: catalog.currentDefinition.category,
         itemName: catalog.currentDefinition.item_name,
         specification: catalog.currentVariant?.specification ?? null,
