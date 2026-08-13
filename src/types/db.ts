@@ -58,6 +58,41 @@ export interface LocationInventorySafetyStock {
   updated_at: string | null
 }
 
+export interface SupplyOutboundLog {
+  id: number
+  supply_item_id: number
+  location_id: number
+  outbound_quantity: number
+  recipient_name: string
+  recipient_contact: string | null
+  operator: string | null
+  outbound_time: string
+  remark: string | null
+}
+
+export interface SupplyDonationLog {
+  id: number
+  supply_item_id: number
+  location_id: number
+  donation_quantity: number
+  donor_name: string
+  donor_contact: string | null
+  operator: string | null
+  donation_time: string
+  remark: string | null
+}
+
+export interface SupplyDisposalLog {
+  id: number
+  supply_item_id: number
+  location_id: number
+  disposal_quantity: number
+  reason: string
+  operator: string | null
+  disposal_time: string
+  remark: string | null
+}
+
 export interface SupplyItem {
   id: number
   category: string

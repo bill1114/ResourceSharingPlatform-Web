@@ -9,6 +9,9 @@ import { SupplyItems } from './pages/SupplyItems'
 import { InventoryTypes } from './pages/InventoryTypes'
 import { Dashboard } from './pages/Dashboard'
 import { SupplyMap } from './pages/SupplyMap'
+import { SupplyOutboundCreate, SupplyOutboundIndex } from './pages/SupplyOutbound'
+import { SupplyDonationCreate, SupplyDonationIndex } from './pages/SupplyDonation'
+import { SupplyDisposalCreate, SupplyDisposalIndex } from './pages/SupplyDisposal'
 import { Roles } from './lib/enums'
 
 function App() {
@@ -28,13 +31,13 @@ function App() {
         <Route path="/supply-locations" element={<SupplyLocations />} />
         <Route path="/transfers/create" element={<Placeholder title="物資轉移" />} />
         <Route path="/transfers" element={<Placeholder title="轉移紀錄" />} />
-        <Route path="/outbound/create" element={<Placeholder title="物資出庫" />} />
-        <Route path="/outbound" element={<Placeholder title="出庫紀錄" />} />
+        <Route path="/outbound/create" element={<SupplyOutboundCreate />} />
+        <Route path="/outbound" element={<SupplyOutboundIndex />} />
         <Route path="/outbound/recipient-analysis" element={<Placeholder title="領取分析" />} />
-        <Route path="/donations/create" element={<Placeholder title="物資捐贈" />} />
-        <Route path="/donations" element={<Placeholder title="捐贈紀錄" />} />
-        <Route path="/disposals/create" element={<Placeholder title="物資報廢" />} />
-        <Route path="/disposals" element={<Placeholder title="報廢紀錄" />} />
+        <Route path="/donations/create" element={<SupplyDonationCreate />} />
+        <Route path="/donations" element={<SupplyDonationIndex />} />
+        <Route path="/disposals/create" element={<SupplyDisposalCreate />} />
+        <Route path="/disposals" element={<SupplyDisposalIndex />} />
         <Route path="/ai-stockin/create" element={<Placeholder title="AI 智慧入庫" />} />
         <Route path="/ai-stockin" element={<Placeholder title="AI 辨識紀錄" />} />
         <Route
