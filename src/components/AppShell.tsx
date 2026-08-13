@@ -4,14 +4,22 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { Roles, roleDisplayName } from '../lib/enums'
+import { useEngineeringMode } from '../hooks/useEngineeringMode'
 
 export function AppShell() {
   const { profile, signOut } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
   const isAdminOrCadre = profile?.role_name === Roles.Admin || profile?.role_name === Roles.Cadre
+  const { enabled: engineeringMode, setEnabled: setEngineeringMode } = useEngineeringMode()
 
   return (
     <>
+      {engineeringMode && (
+        <div className="alert alert-warning rounded-0 border-0 mb-0 py-2 d-flex justify-content-between align-items-center">
+          <span><i className="bi bi-tools" /> <strong>工程模式</strong>－開發中功能僅在此瀏覽器顯示</span>
+          <button type="button" className="btn btn-sm btn-outline-dark" onClick={() => setEngineeringMode(false)}>離開工程模式</button>
+        </div>
+      )}
       <header>
         <nav className="navbar navbar-expand-sm navbar-dark bg-primary border-bottom box-shadow mb-3">
           <div className="container-fluid">
@@ -107,6 +115,13 @@ export function AppShell() {
                     </li>
                   </ul>
                 </li>
+                {engineeringMode && (
+                  <li className="nav-item">
+                    <NavLink className="nav-link text-warning fw-bold" to="/engineering/mobile-features">
+                      <i className="bi bi-phone" /> 手機網頁功能
+                    </NavLink>
+                  </li>
+                )}
                 <li className="nav-item dropdown">
                   <a className="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
                     <i className="bi bi-graph-up" /> 分析報表

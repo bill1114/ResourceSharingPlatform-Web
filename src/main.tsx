@@ -8,6 +8,7 @@ import 'leaflet/dist/leaflet.css'
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './hooks/useAuth.tsx'
+import { EngineeringModeProvider } from './hooks/useEngineeringMode.tsx'
 
 // HashRouter, not BrowserRouter: GitHub Pages has no server-side rewrite, so a
 // refresh on a deep link (e.g. /supply-items) would 404 under BrowserRouter.
@@ -15,9 +16,11 @@ import { AuthProvider } from './hooks/useAuth.tsx'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HashRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <EngineeringModeProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </EngineeringModeProvider>
     </HashRouter>
   </StrictMode>,
 )
