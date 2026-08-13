@@ -1,6 +1,5 @@
 import { Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
-import { Placeholder } from './components/Placeholder'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { RoleGate } from './components/RoleGate'
 import { Login } from './pages/Login'
@@ -13,6 +12,10 @@ import { SupplyOutboundCreate, SupplyOutboundIndex } from './pages/SupplyOutboun
 import { SupplyDonationCreate, SupplyDonationIndex } from './pages/SupplyDonation'
 import { SupplyDisposalCreate, SupplyDisposalIndex } from './pages/SupplyDisposal'
 import { SupplyTransferCreate, SupplyTransferIndex } from './pages/SupplyTransfer'
+import { RecipientAnalysis } from './pages/RecipientAnalysis'
+import { AccountManagement } from './pages/AccountManagement'
+import { LineSettings, AISettings } from './pages/AdminSettings'
+import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
 import { Roles } from './lib/enums'
 
 function App() {
@@ -41,18 +44,18 @@ function App() {
         <Route path="/transfers" element={<SupplyTransferIndex />} />
         <Route path="/outbound/create" element={<SupplyOutboundCreate />} />
         <Route path="/outbound" element={<SupplyOutboundIndex />} />
-        <Route path="/outbound/recipient-analysis" element={<Placeholder title="領取分析" />} />
+        <Route path="/outbound/recipient-analysis" element={<RecipientAnalysis />} />
         <Route path="/donations/create" element={<SupplyDonationCreate />} />
         <Route path="/donations" element={<SupplyDonationIndex />} />
         <Route path="/disposals/create" element={<SupplyDisposalCreate />} />
         <Route path="/disposals" element={<SupplyDisposalIndex />} />
-        <Route path="/ai-stockin/create" element={<Placeholder title="AI 智慧入庫" />} />
-        <Route path="/ai-stockin" element={<Placeholder title="AI 辨識紀錄" />} />
+        <Route path="/ai-stockin/create" element={<RoleGate roles={[Roles.Admin, Roles.Cadre]}><AIStockInCreate /></RoleGate>} />
+        <Route path="/ai-stockin" element={<AIStockInIndex />} />
         <Route
           path="/admin/accounts"
           element={
             <RoleGate roles={[Roles.Admin]}>
-              <Placeholder title="帳號管理" />
+              <AccountManagement />
             </RoleGate>
           }
         />
@@ -68,7 +71,7 @@ function App() {
           path="/admin/line-settings"
           element={
             <RoleGate roles={[Roles.Admin]}>
-              <Placeholder title="LINE 通知設定" />
+              <LineSettings />
             </RoleGate>
           }
         />
@@ -76,7 +79,7 @@ function App() {
           path="/admin/ai-settings"
           element={
             <RoleGate roles={[Roles.Admin]}>
-              <Placeholder title="AI 智慧入庫設定" />
+              <AISettings />
             </RoleGate>
           }
         />

@@ -108,6 +108,15 @@ export interface SupplyTransferLog {
   remark: string | null
 }
 
+export interface AIStockInLog {
+  id: number; location_id: number; input_type: string; input_text: string | null; input_image_path: string | null
+  suggested_category: string | null; suggested_item_name: string | null; suggested_specification: string | null
+  suggested_quantity: number | null; suggested_unit: string | null; suggested_stock_type: string | null
+  suggested_expiration_date: string | null; suggested_safety_stock: number | null; suggested_remark: string | null
+  confidence: number | null; is_confirmed: boolean; confirmed_supply_item_id: number | null; operator: string | null
+  created_at: string; confirmed_at: string | null
+}
+
 export interface SupplyItem {
   id: number
   category: string
