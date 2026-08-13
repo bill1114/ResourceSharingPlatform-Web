@@ -7,6 +7,8 @@ import { Login } from './pages/Login'
 import { SupplyLocations } from './pages/SupplyLocations'
 import { SupplyItems } from './pages/SupplyItems'
 import { InventoryTypes } from './pages/InventoryTypes'
+import { Dashboard } from './pages/Dashboard'
+import { SupplyMap } from './pages/SupplyMap'
 import { Roles } from './lib/enums'
 
 function App() {
@@ -20,8 +22,8 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<Placeholder title="戰情總覽" />} />
-        <Route path="/map" element={<Placeholder title="據點地圖" />} />
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/map" element={<SupplyMap />} />
         <Route path="/supply-items" element={<SupplyItems />} />
         <Route path="/supply-locations" element={<SupplyLocations />} />
         <Route path="/transfers/create" element={<Placeholder title="物資轉移" />} />
