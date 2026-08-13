@@ -1,0 +1,17 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+const jsonHeaders={'Content-Type':'application/json'}
+function bytesToBase64(bytes:Uint8Array){let s='';for(const b of bytes)s+=String.fromCharCode(b);return btoa(s)}
+async function validSignature(body:string,signature:string,secret:string){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);const digest=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(body));return bytesToBase64(new Uint8Array(digest))===signature}
+async function reply(token:string,message:string,accessToken:string){const r=await fetch('https://api.line.me/v2/bot/message/reply',{method:'POST',headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({replyToken:token,messages:[{type:'text',text:message}]})});if(!r.ok)throw new Error(`LINE reply ${r.status}: ${await r.text()}`)}
+serve(async(req)=>{try{
+ const raw=await req.text();const signature=req.headers.get('X-Line-Signature')??'';const admin=createClient(Deno.env.get('SUPABASE_URL')??'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'');const{data:s}=await admin.from('line_notification_settings').select('*').limit(1).maybeSingle();if(!s?.channel_secret||!s.channel_access_token)return new Response('LINE 尚未設定',{status:503});if(!await validSignature(raw,signature,s.channel_secret))return new Response('Invalid signature',{status:401});const payload=JSON.parse(raw)
+ for(const event of payload.events??[]){const uid=event.source?.userId;const replyToken=event.replyToken;if(!uid||!replyToken)continue
+  if(event.type==='follow'){await reply(replyToken,'歡迎使用地方物資管理平台。請先由管理員產生綁定碼，再傳送「綁定 123456」。',s.channel_access_token);continue}
+  if(event.type!=='message'||event.message?.type!=='text')continue;const text=String(event.message.text??'').trim()
+  if(text==='我的ID'){await reply(replyToken,`您的 LINE User ID：\n${uid}`,s.channel_access_token);continue}
+  const match=text.match(/^綁定\s*([0-9]{6})$/);if(match){const code=match[1];const{data:bindCode}=await admin.from('line_bind_codes').select('*').eq('code',code).eq('used',false).gt('expires_at',new Date().toISOString()).maybeSingle();if(!bindCode){await reply(replyToken,'綁定碼無效或已過期，請回到系統重新產生。',s.channel_access_token);continue}const{data:occupied}=await admin.from('line_bindings').select('id').or(`profile_id.eq.${bindCode.profile_id},line_user_id.eq.${uid}`).maybeSingle();if(occupied){await reply(replyToken,'此 LINE 或網頁帳號已完成綁定，如需更換請由管理員先解除。',s.channel_access_token);continue}let displayName:string|null=null;const profileRes=await fetch(`https://api.line.me/v2/bot/profile/${uid}`,{headers:{Authorization:`Bearer ${s.channel_access_token}`}});if(profileRes.ok)displayName=(await profileRes.json()).displayName??null;const{error}=await admin.from('line_bindings').insert({profile_id:bindCode.profile_id,line_user_id:uid,line_display_name:displayName});if(error)throw error;await admin.from('line_bind_codes').update({used:true}).eq('code',code);await reply(replyToken,'綁定成功！之後可由 LINE 圖文選單進入手機網頁功能。',s.channel_access_token);continue}
+  await reply(replyToken,'請從下方圖文選單開啟功能。若尚未綁定，請傳送「綁定 123456」。',s.channel_access_token)
+ }
+ return new Response('OK')
+}catch(e){console.error(e);return new Response(JSON.stringify({error:e instanceof Error?e.message:'Webhook error'}),{status:500,headers:jsonHeaders})}})
