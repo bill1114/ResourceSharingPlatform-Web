@@ -1,43 +1,81 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { Roles, stockTypeDisplayName } from '../lib/enums'
+import { Roles } from '../lib/enums'
 import { supabase } from '../lib/supabaseClient'
-import type { SupplyItem, SupplyLocation } from '../types/db'
+import type { AIStockInLog, SupplyItem, SupplyLocation, SupplyTransferLog } from '../types/db'
+import './mobile-original.css'
 
 const features = [
-  { path: '/mobile/inventory', icon: 'bi-search', title: '物資查詢', description: '依據點查詢目前可用庫存與效期', color: 'primary' },
-  { path: '/mobile/pickup', icon: 'bi-bag-check', title: '物資領用', description: '選擇物資批次並登記領用資訊', color: 'success' },
-  { path: '/mobile/transfer', icon: 'bi-arrow-left-right', title: '物資轉讓', description: '建立據點間轉移並追蹤確認狀態', color: 'warning', restricted: true },
-  { path: '/mobile/vision', icon: 'bi-camera', title: '影像辨識入庫', description: '拍照辨識，人工核對後才正式入庫', color: 'info', restricted: true },
-]
+  ['/mobile/inventory', '⌕', '物資查詢', '查看目前可用庫存與效期'],
+  ['/mobile/pickup', '▣', '物資領用', '快到期物資優先領用'],
+  ['/mobile/transfer', '⇄', '物資轉讓', '據點間轉移與到貨確認'],
+  ['/mobile/vision', '▧', '影像入庫', '拍照辨識並核對入庫'],
+] as const
+
+function useMobileData() {
+  const { profile } = useAuth()
+  const [items, setItems] = useState<SupplyItem[]>([])
+  const [locations, setLocations] = useState<SupplyLocation[]>([])
+  const [loading, setLoading] = useState(true)
+  async function load() {
+    setLoading(true)
+    const [a, b] = await Promise.all([
+      supabase.from('supply_item').select('*').eq('is_active', true).gt('quantity', 0).order('expiration_date'),
+      supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
+    ])
+    setItems((a.data ?? []) as SupplyItem[]); setLocations((b.data ?? []) as SupplyLocation[]); setLoading(false)
+  }
+  useEffect(() => { void load() }, [])
+  return { profile, items, locations, loading, load }
+}
+
+function MobileTop({ eyebrow, title, meta, refresh }: { eyebrow?: string; title: string; meta: string; refresh?: () => void }) {
+  return <header className="m-hero"><div>{eyebrow && <div className="m-eyebrow">{eyebrow}</div>}<h1>{title}</h1><p>{meta}</p></div>{refresh && <button className="m-refresh" onClick={refresh} aria-label="重新整理">↻</button>}</header>
+}
+function expiryState(x: SupplyItem) { if (!x.expiration_date) return 'normal'; const days = Math.ceil((new Date(x.expiration_date).getTime() - Date.now()) / 86400000); return days < 0 ? 'expired' : days <= 30 ? 'expiring' : 'normal' }
+function expiryText(x: SupplyItem) { const s = expiryState(x); return !x.expiration_date ? '無效期' : s === 'expired' ? `已過期 ${x.expiration_date}` : s === 'expiring' ? `快過期 ${x.expiration_date}` : `效期 ${x.expiration_date}` }
+function ItemCard({ item, selected, onClick }: { item: SupplyItem; selected?: boolean; onClick?: () => void }) {
+  const Tag = onClick ? 'button' : 'div'; const state = expiryState(item)
+  return <Tag className={`m-item ${state} ${selected ? 'selected' : ''}`} onClick={onClick}><div><div className="m-item-name">{item.item_name}<span>{item.category}</span></div><div className="m-details">{item.specification || '一般規格'} · <b className={state}>{expiryText(item)}</b></div></div><div className="m-quantity">{item.quantity} {item.unit}</div></Tag>
+}
 
 export function MobileFeatures() {
-  const { profile } = useAuth()
-  const canManage = profile?.role_name === Roles.Admin || profile?.role_name === Roles.Cadre
-  return <div className="container py-4" style={{ maxWidth: 720 }}>
-    <div className="text-center mb-4"><div className="display-6"><i className="bi bi-phone" /></div><h2>手機網頁功能</h2><p className="text-muted">LINE 圖文選單四項功能的工程預覽版</p></div>
-    <div className="row g-3">{features.map((feature) => {
-      const unavailable = feature.restricted && !canManage
-      return <div className="col-12 col-sm-6" key={feature.path}><div className={`card h-100 shadow-sm ${unavailable ? 'opacity-50' : ''}`}><div className="card-body d-flex flex-column">
-        <div className={`rounded-circle bg-${feature.color} bg-opacity-10 text-${feature.color} d-flex align-items-center justify-content-center mb-3`} style={{ width: 52, height: 52 }}><i className={`bi ${feature.icon} fs-4`} /></div>
-        <h5>{feature.title}</h5><p className="text-muted flex-grow-1">{feature.description}</p>
-        {unavailable ? <button className="btn btn-secondary" disabled>目前角色不可使用</button> : <Link className={`btn btn-${feature.color}`} to={feature.path}>開啟功能</Link>}
-      </div></div></div>
-    })}</div>
-    <div className="alert alert-secondary mt-4 small"><i className="bi bi-info-circle" /> 此頁只在工程模式顯示。正式串接 LINE／LIFF 前，會再把登入與手機導覽調整為獨立流程。</div>
+  const { profile } = useAuth(); const canManage = [Roles.Admin, Roles.Cadre].includes(profile?.role_name as never)
+  return <div className="mobile-page m-menu"><MobileTop eyebrow="LINE 圖文選單" title="手機網頁功能" meta="請選擇要使用的功能" />
+    <div className="m-feature-grid">{features.map(([path, icon, title, desc], i) => { const denied = i > 1 && !canManage; return <div className={`m-feature ${denied ? 'disabled' : ''}`} key={path}><div className="m-feature-icon">{icon}</div><h2>{title}</h2><p>{desc}</p>{denied ? <button disabled>目前角色不可使用</button> : <Link to={path}>開啟功能</Link>}</div> })}</div>
   </div>
 }
 
 export function MobileInventory() {
-  const { profile } = useAuth()
-  const [items, setItems] = useState<SupplyItem[]>([]), [locations, setLocations] = useState<SupplyLocation[]>([])
-  const [locationId, setLocationId] = useState<number | null>(profile?.location_id ?? null), [keyword, setKeyword] = useState(''), [loading, setLoading] = useState(true)
-  useEffect(() => { Promise.all([supabase.from('supply_item').select('*').eq('is_active', true).gt('quantity', 0).order('item_name'), supabase.from('supply_location').select('*').eq('is_active', true).order('id')]).then(([a,b]) => { setItems((a.data ?? []) as SupplyItem[]); setLocations((b.data ?? []) as SupplyLocation[]); setLoading(false) }) }, [])
-  const visible = useMemo(() => items.filter((x) => (!locationId || x.location_id === locationId) && `${x.category} ${x.item_name} ${x.specification ?? ''}`.toLowerCase().includes(keyword.toLowerCase())), [items, locationId, keyword])
-  return <div className="container py-3" style={{ maxWidth: 720 }}>
-    <div className="d-flex align-items-center gap-2 mb-3"><Link to="/engineering/mobile-features" className="btn btn-outline-secondary btn-sm"><i className="bi bi-chevron-left" /></Link><h3 className="mb-0">物資查詢</h3></div>
-    <div className="card shadow-sm mb-3"><div className="card-body"><select className="form-select mb-2" value={locationId ?? ''} onChange={(e) => setLocationId(e.target.value ? Number(e.target.value) : null)}><option value="">全部可見據點</option>{locations.map(x => <option value={x.id} key={x.id}>{x.location_name}</option>)}</select><input className="form-control" placeholder="搜尋物資名稱、種類或規格" value={keyword} onChange={(e) => setKeyword(e.target.value)} /></div></div>
-    {loading ? <div className="text-center py-5 text-muted">載入中…</div> : visible.length === 0 ? <div className="alert alert-info">目前沒有符合的可用物資</div> : <div className="d-grid gap-2">{visible.map(item => <div className="card shadow-sm" key={item.id}><div className="card-body"><div className="d-flex justify-content-between gap-3"><div><div className="small text-muted">{item.category}</div><h5 className="mb-1">{item.item_name}</h5>{item.specification && <div className="small">{item.specification}</div>}</div><div className="text-end"><div className="fs-4 fw-bold text-primary">{item.quantity}</div><div>{item.unit}</div></div></div><hr className="my-2" /><div className="d-flex justify-content-between small text-muted"><span>{stockTypeDisplayName(item.stock_type)}</span><span>{item.expiration_date ? `效期 ${item.expiration_date}` : '無效期'}</span></div></div></div>)}</div>}
-  </div>
+  const { profile, items, locations, loading, load } = useMobileData(); const [keyword, setKeyword] = useState(''); const [filter, setFilter] = useState('all')
+  const locationId = profile?.location_id; const rows = useMemo(() => items.filter(x => (!locationId || x.location_id === locationId) && (filter === 'all' || expiryState(x) === filter) && `${x.item_name} ${x.category} ${x.specification ?? ''}`.toLowerCase().includes(keyword.toLowerCase())), [items, locationId, filter, keyword])
+  const site = locations.find(x => x.id === locationId)?.location_name ?? '全部可見據點'
+  return <div className="mobile-page"><MobileTop eyebrow="目前可用庫存" title="物資查詢" meta={site} refresh={() => void load()} /><section className="m-toolbar"><label className="m-search">⌕<input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="搜尋物資名稱" /></label><div className="m-filters">{[['all','全部'],['expired','已過期'],['expiring','快過期'],['normal','一般']].map(([v,t]) => <button className={filter === v ? 'active' : ''} onClick={() => setFilter(v)} key={v}>{t}</button>)}</div></section><div className="m-summary">{loading ? '讀取中…' : `共 ${rows.length} 項物資`}</div><section className="m-list">{rows.map(x => <ItemCard item={x} key={x.id} />)}</section>{!loading && !rows.length && <div className="m-empty">找不到符合條件的物資。</div>}</div>
+}
+
+export function MobilePickup() {
+  const { profile, items, locations, load } = useMobileData(); const [keyword, setKeyword] = useState(''); const [selected, setSelected] = useState<SupplyItem | null>(null); const [open, setOpen] = useState(false); const [name, setName] = useState(''); const [contact, setContact] = useState(''); const [qty, setQty] = useState(1); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('')
+  const rows = items.filter(x => (!profile?.location_id || x.location_id === profile.location_id) && `${x.item_name} ${x.category}`.toLowerCase().includes(keyword.toLowerCase())); const site = locations.find(x => x.id === profile?.location_id)?.location_name ?? '可用據點'
+  async function submit(e: FormEvent) { e.preventDefault(); if (!selected || !profile?.location_id) return; setBusy(true); const { data, error } = await supabase.functions.invoke('outbound-create', { body: { supplyItemId: selected.id, locationId: profile.location_id, outboundQuantity: qty, recipientName: name, recipientContact: contact, remark: '' } }); setBusy(false); if (error || !data?.success) return setMessage(data?.message ?? error?.message ?? '領用失敗'); setMessage(data.message); setOpen(false); setSelected(null); setName(''); await load() }
+  return <div className="mobile-page with-dock"><MobileTop eyebrow="由快到期物資優先" title="物資領用" meta={site} refresh={() => void load()} />{message && <div className="m-banner">{message}</div>}<section className="m-toolbar"><label className="m-search">⌕<input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="搜尋要領用的物資" /></label></section><div className="m-summary">{selected ? `已選擇：${selected.item_name}` : '請先選擇一項物資'}</div><section className="m-list">{rows.map(x => <ItemCard item={x} selected={selected?.id === x.id} onClick={() => setSelected(x)} key={x.id} />)}</section><div className="m-dock"><span>{selected ? `${selected.item_name} · ${selected.quantity} ${selected.unit}` : '尚未選擇物資'}</span><button disabled={!selected} onClick={() => { setQty(1); setOpen(true) }}>設定領用數量</button></div>{open && selected && <div className="m-modal"><button className="m-backdrop" onClick={() => setOpen(false)} /><form className="m-sheet" onSubmit={submit}><div className="m-handle"/><h2>確認領用</h2><div className="m-chosen">{selected.item_name} · 可用 {selected.quantity} {selected.unit}</div><label>領用人姓名 <b>*</b></label><input required maxLength={50} value={name} onChange={e => setName(e.target.value)} placeholder="必填"/><label>聯絡方式</label><input maxLength={50} value={contact} onChange={e => setContact(e.target.value)} placeholder="選填"/><label>領用數量</label><div className="m-qty"><button type="button" onClick={() => setQty(Math.max(1, qty-1))}>−</button><input type="number" min={1} max={selected.quantity} value={qty} onChange={e => setQty(Number(e.target.value))}/><button type="button" onClick={() => setQty(Math.min(selected.quantity, qty+1))}>＋</button></div><small>最多可領用 {selected.quantity} {selected.unit}</small><div className="m-sheet-actions"><button type="button" onClick={() => setOpen(false)}>取消</button><button disabled={busy}>{busy ? '處理中…' : '確認領用'}</button></div></form></div>}</div>
+}
+
+export function MobileTransfer() {
+  const { profile, items, locations, load } = useMobileData(); const [step, setStep] = useState(1); const [to, setTo] = useState<number|null>(null); const [item, setItem] = useState<SupplyItem|null>(null); const [qty, setQty] = useState(1); const [busy,setBusy]=useState(false); const [message,setMessage]=useState(''); const [pending,setPending]=useState<SupplyTransferLog[]>([])
+  const from = profile?.location_id; const sourceItems = items.filter(x => x.location_id === from); const siteName=(id:number|null|undefined)=>locations.find(x=>x.id===id)?.location_name ?? '—'
+  useEffect(()=>{supabase.from('supply_transfer_log').select('*').eq('to_location_id',from ?? -1).eq('status','Pending').order('transfer_time').then(({data})=>setPending((data??[]) as SupplyTransferLog[]))},[from])
+  async function resolve(fn:'transfer-confirm'|'transfer-cancel',id:number){const {data,error}=await supabase.functions.invoke(fn,{body:{logId:id}});setMessage(data?.message??error?.message??'操作失敗');setPending(x=>x.filter(y=>y.id!==id));await load()}
+  async function submit(){if(!from||!to||!item)return;setBusy(true);const{data,error}=await supabase.functions.invoke('transfer-create',{body:{fromLocationId:from,toLocationId:to,lines:[{supplyItemId:item.id,transferQuantity:qty}],remark:''}});setBusy(false);setMessage(data?.message??error?.message??'建立失敗');if(data?.success){setStep(1);setTo(null);setItem(null);setQty(1);await load()}}
+  const next=()=>{if(step===1&&!to)return setMessage('請選擇目標據點');if(step===2&&!item)return setMessage('請選擇品項');if(step===4)return void submit();setMessage('');setStep(x=>Math.min(4,x+1))}
+  return <div className="mobile-page transfer with-dock"><header className="m-topbar"><h1>🔄 物資轉讓</h1><p>{siteName(from)} · {profile?.display_name ?? profile?.username}</p></header>{message&&<div className="m-banner">{message}</div>}{pending.length>0&&<section className="m-panel pending"><h3>待確認轉入</h3>{pending.map(x=><div className="m-pending" key={x.id}><span>物資 #{x.supply_item_id}<small>{x.transfer_quantity} 件 · 來自 {siteName(x.from_location_id)}</small></span><div><button onClick={()=>void resolve('transfer-cancel',x.id)}>取消</button><button onClick={()=>void resolve('transfer-confirm',x.id)}>確認</button></div></div>)}</section>}<nav className="m-steps">{['1 據點','2 品項','3 數量','4 確認'].map((x,i)=><button className={step===i+1?'active':step>i+1?'done':''} onClick={()=>i+1<step&&setStep(i+1)} key={x}>{x}</button>)}</nav>{step===1&&<><section className="m-panel"><small>從（您的據點）</small><strong>{siteName(from)}</strong></section><h3 className="m-section-title">選擇目標據點</h3><div className="m-options">{locations.filter(x=>x.id!==from).map(x=><button className={to===x.id?'selected':''} onClick={()=>setTo(x.id)} key={x.id}><strong>{x.location_name}</strong><span>{x.address||'未設定地址'}</span></button>)}</div></>}{step===2&&<><h3 className="m-section-title">選擇要轉出的品項</h3><div className="m-options">{sourceItems.map(x=><button className={item?.id===x.id?'selected':''} onClick={()=>setItem(x)} key={x.id}><strong>{x.item_name}</strong><span>{x.specification||'一般規格'} · 可轉 {x.quantity} {x.unit}</span></button>)}</div></>}{step===3&&item&&<section className="m-panel"><strong>{item.item_name} → {siteName(to)}</strong><label>轉讓數量</label><div className="m-qty"><button onClick={()=>setQty(Math.max(1,qty-1))}>−</button><input type="number" min={1} max={item.quantity} value={qty} onChange={e=>setQty(Math.min(item.quantity,Math.max(1,Number(e.target.value))))}/><button onClick={()=>setQty(Math.min(item.quantity,qty+1))}>＋</button></div><small>可轉庫存：{item.quantity} {item.unit}</small></section>}{step===4&&item&&<section className="m-panel"><h3>請確認轉讓內容</h3><dl><dt>來源據點</dt><dd>{siteName(from)}</dd><dt>目標據點</dt><dd>{siteName(to)}</dd><dt>物資</dt><dd>{item.item_name}</dd><dt>數量</dt><dd>{qty} {item.unit}</dd></dl></section>}<div className="m-dock two"><button disabled={step===1||busy} onClick={()=>setStep(x=>x-1)}>上一步</button><button disabled={busy} onClick={next}>{busy?'處理中…':step===4?'確認轉讓':'下一步'}</button></div></div>
+}
+
+export function MobileVision() {
+  const { profile, locations } = useMobileData(); const fileRef=useRef<HTMLInputElement>(null); const cameraRef=useRef<HTMLInputElement>(null); const [file,setFile]=useState<File|null>(null); const [logs,setLogs]=useState<AIStockInLog[]>([]); const [tab,setTab]=useState('no_expiry'); const [busy,setBusy]=useState(false); const [message,setMessage]=useState(''); const locationId=profile?.location_id; const site=locations.find(x=>x.id===locationId)?.location_name??'未指定據點'
+  async function recognize(f:File){if(!locationId)return setMessage('帳號尚未指定據點');setFile(f);setBusy(true);const ext=f.name.split('.').pop()?.toLowerCase()||'jpg';const path=`${profile?.id}/${crypto.randomUUID()}.${ext}`;const up=await supabase.storage.from('ai-stockin').upload(path,f);if(up.error){setBusy(false);return setMessage(up.error.message)}const{data,error}=await supabase.functions.invoke('ai-stockin-recognize',{body:{locationId,imagePath:path}});setBusy(false);if(error||!data?.success)return setMessage(data?.message??error?.message??'辨識失敗');setLogs(data.logs??[data.log]);setMessage(data.message)}
+  const group=(x:AIStockInLog)=>x.suggested_stock_type==='NoExpiry'?'no_expiry':x.suggested_stock_type==='Frozen'?'frozen':'expiring';const visible=logs.filter(x=>group(x)===tab);const update=(id:number,p:Partial<AIStockInLog>)=>setLogs(xs=>xs.map(x=>x.id===id?{...x,...p}:x))
+  async function confirm(){setBusy(true);for(const x of logs){const{data,error}=await supabase.functions.invoke('ai-stockin-confirm',{body:{logId:x.id,locationId,category:x.suggested_category,itemName:x.suggested_item_name,specification:x.suggested_specification,quantity:x.suggested_quantity,unit:x.suggested_unit,stockType:x.suggested_stock_type,expirationDate:x.suggested_expiration_date,safetyStock:x.suggested_safety_stock,remark:x.suggested_remark}});if(error||!data?.success){setBusy(false);return setMessage(data?.message??error?.message??'入庫失敗')}}setBusy(false);setLogs([]);setFile(null);setMessage('本批物資已確認入庫')}
+  const choose=(e:React.ChangeEvent<HTMLInputElement>)=>{const f=e.target.files?.[0];if(f)void recognize(f)}
+  return <div className="mobile-page vision with-dock"><header className="m-topbar"><h1>📷 影像入庫</h1><p>{site} · {profile?.display_name??profile?.username}</p></header>{message&&<div className="m-banner">{message}</div>}<section className="m-panel"><button className="m-upload" onClick={()=>fileRef.current?.click()}><strong>{file?file.name:'點這裡上傳物資照片'}</strong><span>建議單層擺放、標籤朝鏡頭。<br/>可連續拍多張，系統會自動加總。</span></button><div className="m-upload-actions"><button onClick={()=>cameraRef.current?.click()}>開啟相機</button><button onClick={()=>fileRef.current?.click()}>相簿選擇</button></div><input hidden ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={choose}/><input hidden ref={fileRef} type="file" accept="image/*" onChange={choose}/></section>{logs.length>0&&<nav className="m-tabs">{[['no_expiry','無效期物資'],['expiring','有效期物資'],['frozen','冷凍食品']].map(([v,t])=><button className={tab===v?'active':''} onClick={()=>setTab(v)} key={v}>{t} <b>{logs.filter(x=>group(x)===v).length}</b></button>)}</nav>}{!logs.length?<div className="m-empty">{busy?'AI 辨識處理中…':'上傳照片後，這裡會列出可編輯的物資資料。'}</div>:visible.map((x,i)=><section className="m-panel m-reco" key={x.id}><div className="m-reco-head"><small>辨識項目 {i+1}</small><button onClick={()=>setLogs(xs=>xs.filter(y=>y.id!==x.id))}>移除</button></div><label>物資名稱 *</label><input value={x.suggested_item_name??''} onChange={e=>update(x.id,{suggested_item_name:e.target.value})}/><div className="m-grid"><div><label>數量 *</label><input type="number" min={1} value={x.suggested_quantity??1} onChange={e=>update(x.id,{suggested_quantity:Number(e.target.value)})}/></div><div><label>單位 *</label><input value={x.suggested_unit??'個'} onChange={e=>update(x.id,{suggested_unit:e.target.value})}/></div></div>{group(x)!=='no_expiry'&&<><label>有效期限</label><input type="date" value={x.suggested_expiration_date??''} onChange={e=>update(x.id,{suggested_expiration_date:e.target.value})}/></>}</section>)}<div className="m-dock two"><button onClick={()=>{setLogs([]);setFile(null);setMessage('')}}>清除本批</button><button disabled={!logs.length||busy} onClick={()=>void confirm()}>{busy?'處理中…':'確認入庫'}</button></div></div>
 }

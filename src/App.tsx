@@ -17,7 +17,7 @@ import { AccountManagement } from './pages/AccountManagement'
 import { LineSettings, AISettings } from './pages/AdminSettings'
 import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
 import { EngineeringRoute } from './components/EngineeringRoute'
-import { MobileFeatures, MobileInventory } from './pages/MobileFeatures'
+import { MobileFeatures, MobileInventory, MobilePickup, MobileTransfer, MobileVision } from './pages/MobileFeatures'
 import { Roles } from './lib/enums'
 
 function App() {
@@ -55,9 +55,9 @@ function App() {
         <Route path="/ai-stockin" element={<AIStockInIndex />} />
         <Route path="/engineering/mobile-features" element={<EngineeringRoute><MobileFeatures /></EngineeringRoute>} />
         <Route path="/mobile/inventory" element={<EngineeringRoute><MobileInventory /></EngineeringRoute>} />
-        <Route path="/mobile/pickup" element={<EngineeringRoute><SupplyOutboundCreate /></EngineeringRoute>} />
-        <Route path="/mobile/transfer" element={<EngineeringRoute><RoleGate roles={[Roles.Admin, Roles.Cadre]}><SupplyTransferCreate /></RoleGate></EngineeringRoute>} />
-        <Route path="/mobile/vision" element={<EngineeringRoute><RoleGate roles={[Roles.Admin, Roles.Cadre]}><AIStockInCreate /></RoleGate></EngineeringRoute>} />
+        <Route path="/mobile/pickup" element={<EngineeringRoute><MobilePickup /></EngineeringRoute>} />
+        <Route path="/mobile/transfer" element={<EngineeringRoute><RoleGate roles={[Roles.Admin, Roles.Cadre]}><MobileTransfer /></RoleGate></EngineeringRoute>} />
+        <Route path="/mobile/vision" element={<EngineeringRoute><RoleGate roles={[Roles.Admin, Roles.Cadre]}><MobileVision /></RoleGate></EngineeringRoute>} />
         <Route
           path="/admin/accounts"
           element={
