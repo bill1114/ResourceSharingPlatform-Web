@@ -2,6 +2,14 @@
 // what role/location they have, before doing a service-role write. Mirrors
 // the permission checks that used to live in each C# Controller
 // (GetMyLocationIdIfRestricted / [Authorize(Roles=...)]).
+//
+// REFERENCE ONLY: the Supabase Dashboard's browser-based "Via Editor" deploy
+// flow used for this project only supports pasting one self-contained file
+// per function, so the actually-deployed functions (outbound-create,
+// donation-create, disposal-create, ...) each inline a copy of this code
+// rather than importing it. Keep this file as the source of truth to copy
+// from / diff against when adding new functions or fixing a bug here -
+// remember to propagate any fix to every function that inlined it.
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 export interface CallerProfile {

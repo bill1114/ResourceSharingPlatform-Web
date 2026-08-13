@@ -1,7 +1,60 @@
 // Port of SupplyDisposalController.Create (POST) + SupplyDisposalService.
+// Self-contained (no relative imports) so it can be pasted directly into the
+// Supabase Dashboard's single-file "Via Editor" deploy flow.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { corsHeaders } from '../_shared/cors.ts'
-import { AuthError, assertLocationAccess, requireCaller } from '../_shared/auth.ts'
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+interface CallerProfile {
+  id: string
+  username: string
+  display_name: string | null
+  role_name: 'Admin' | 'Cadre' | 'SocialWorker'
+  location_id: number | null
+  is_active: boolean
+}
+
+class AuthError extends Error {
+  status: number
+  constructor(message: string, status = 403) {
+    super(message)
+    this.status = status
+  }
+}
+
+async function requireCaller(req: Request): Promise<{ profile: CallerProfile; adminClient: SupabaseClient; isAdmin: boolean }> {
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader) throw new AuthError('缺少登入憑證', 401)
+
+  const callerClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    { global: { headers: { Authorization: authHeader } } }
+  )
+
+  const {
+    data: { user },
+  } = await callerClient.auth.getUser()
+  if (!user) throw new AuthError('登入已失效，請重新登入', 401)
+
+  const { data: profile, error } = await callerClient.from('profiles').select('*').eq('id', user.id).single()
+  if (error || !profile) throw new AuthError('找不到使用者資料', 401)
+  if (!profile.is_active) throw new AuthError('帳號已停用', 403)
+
+  const adminClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
+
+  return { profile: profile as CallerProfile, adminClient, isAdmin: profile.role_name === 'Admin' }
+}
+
+function assertLocationAccess(ctx: { profile: CallerProfile; isAdmin: boolean }, locationId: number) {
+  if (ctx.isAdmin) return
+  if (ctx.profile.location_id == null) throw new AuthError('您的帳號尚未指定所屬據點，無法執行此操作', 403)
+  if (ctx.profile.location_id !== locationId) throw new AuthError('您沒有權限在此據點執行此操作', 403)
+}
 
 interface Body {
   supplyItemId: number
