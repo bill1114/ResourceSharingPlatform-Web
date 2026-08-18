@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { Roles } from '../lib/enums'
+import { Roles, roleDisplayName } from '../lib/enums'
 import { supabase } from '../lib/supabaseClient'
 import { functionErrorMessage } from '../lib/functionError'
 import type { AIStockInLog, SupplyItem, SupplyLocation, SupplyTransferLog } from '../types/db'
@@ -43,6 +43,22 @@ function expiryText(x: SupplyItem) { const s = expiryState(x); return !x.expirat
 function ItemCard({ item, selected, onClick }: { item: SupplyItem; selected?: boolean; onClick?: () => void }) {
   const Tag = onClick ? 'button' : 'div'; const state = expiryState(item)
   return <Tag className={`m-item ${state} ${selected ? 'selected' : ''}`} onClick={onClick}><div><div className="m-item-name">{item.item_name}<span>{item.category}</span></div><div className="m-details">{item.specification || '一般規格'} · <b className={state}>{expiryText(item)}</b></div></div><div className="m-quantity">{item.quantity} {item.unit}</div></Tag>
+}
+
+// Shown full-screen when a signed-in user opens a LINE rich-menu URL for a
+// feature their role can't use (e.g. a SocialWorker tapping 物資轉讓/影像入庫).
+export function MobileNoAccess() {
+  const { profile } = useAuth()
+  return (
+    <div className="mobile-page">
+      <MobileTop eyebrow="LINE 圖文選單" title="無法使用此功能" meta={`目前角色：${roleDisplayName(profile?.role_name)}`} />
+      <div className="m-empty">
+        您的帳號角色無法使用此功能。
+        <br />
+        如需使用，請聯絡系統管理員調整權限。
+      </div>
+    </div>
+  )
 }
 
 export function MobileFeatures() {

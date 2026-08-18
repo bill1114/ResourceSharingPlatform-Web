@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Outlet, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { RoleGate } from './components/RoleGate'
@@ -17,13 +17,44 @@ import { AccountManagement } from './pages/AccountManagement'
 import { LineSettings, AISettings } from './pages/AdminSettings'
 import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
 import { EngineeringRoute } from './components/EngineeringRoute'
-import { MobileFeatures, MobileInventory, MobilePickup, MobileTransfer, MobileVision } from './pages/MobileFeatures'
+import { MobileFeatures, MobileInventory, MobilePickup, MobileTransfer, MobileVision, MobileNoAccess } from './pages/MobileFeatures'
 import { Roles } from './lib/enums'
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
+      {/* LINE 圖文選單導向的手機頁面：全螢幕、不套桌面外殼，只需登入 + 角色權限。
+          物資查詢／物資領用 全角色可用；物資轉讓／影像入庫 限管理員與幹部，
+          其餘角色會看到 MobileNoAccess 無權限畫面。 */}
+      <Route
+        element={
+          <ProtectedRoute>
+            <Outlet />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/mobile/inventory" element={<MobileInventory />} />
+        <Route path="/mobile/pickup" element={<MobilePickup />} />
+        <Route
+          path="/mobile/transfer"
+          element={
+            <RoleGate roles={[Roles.Admin, Roles.Cadre]} fallback={<MobileNoAccess />}>
+              <MobileTransfer />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="/mobile/vision"
+          element={
+            <RoleGate roles={[Roles.Admin, Roles.Cadre]} fallback={<MobileNoAccess />}>
+              <MobileVision />
+            </RoleGate>
+          }
+        />
+      </Route>
+
       <Route
         element={
           <ProtectedRoute>
@@ -54,10 +85,6 @@ function App() {
         <Route path="/ai-stockin/create" element={<RoleGate roles={[Roles.Admin, Roles.Cadre]}><AIStockInCreate /></RoleGate>} />
         <Route path="/ai-stockin" element={<AIStockInIndex />} />
         <Route path="/engineering/mobile-features" element={<EngineeringRoute><MobileFeatures /></EngineeringRoute>} />
-        <Route path="/mobile/inventory" element={<EngineeringRoute><MobileInventory /></EngineeringRoute>} />
-        <Route path="/mobile/pickup" element={<EngineeringRoute><MobilePickup /></EngineeringRoute>} />
-        <Route path="/mobile/transfer" element={<EngineeringRoute><RoleGate roles={[Roles.Admin, Roles.Cadre]}><MobileTransfer /></RoleGate></EngineeringRoute>} />
-        <Route path="/mobile/vision" element={<EngineeringRoute><RoleGate roles={[Roles.Admin, Roles.Cadre]}><MobileVision /></RoleGate></EngineeringRoute>} />
         <Route
           path="/admin/accounts"
           element={
