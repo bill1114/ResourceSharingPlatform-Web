@@ -37,6 +37,8 @@ export function SupplyLocations() {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [keyword, setKeyword] = useState('')
+  const [coordFilter, setCoordFilter] = useState<'' | 'set' | 'unset'>('')
+  const [contactFilter, setContactFilter] = useState<'' | 'has' | 'none'>('')
 
   async function load() {
     setLoading(true)
@@ -58,16 +60,31 @@ export function SupplyLocations() {
   }, [])
 
   const filteredLocations = useMemo(() => {
-    if (!keyword.trim()) return locations
-    const k = keyword.trim().toLowerCase()
-    return locations.filter(
-      (l) =>
-        l.location_name.toLowerCase().includes(k) ||
-        (l.address ?? '').toLowerCase().includes(k) ||
-        (l.contact_person ?? '').toLowerCase().includes(k) ||
-        (l.phone ?? '').toLowerCase().includes(k)
-    )
-  }, [locations, keyword])
+    return locations.filter((l) => {
+      const hasCoord = l.latitude != null && l.longitude != null
+      if (coordFilter === 'set' && !hasCoord) return false
+      if (coordFilter === 'unset' && hasCoord) return false
+      const hasContact = !!(l.contact_person?.trim() || l.phone?.trim())
+      if (contactFilter === 'has' && !hasContact) return false
+      if (contactFilter === 'none' && hasContact) return false
+      if (keyword.trim()) {
+        const k = keyword.trim().toLowerCase()
+        const matches =
+          l.location_name.toLowerCase().includes(k) ||
+          (l.address ?? '').toLowerCase().includes(k) ||
+          (l.contact_person ?? '').toLowerCase().includes(k) ||
+          (l.phone ?? '').toLowerCase().includes(k)
+        if (!matches) return false
+      }
+      return true
+    })
+  }, [locations, keyword, coordFilter, contactFilter])
+
+  function resetFilters() {
+    setKeyword('')
+    setCoordFilter('')
+    setContactFilter('')
+  }
 
   function openCreate() {
     setForm(emptyForm)
@@ -149,7 +166,7 @@ export function SupplyLocations() {
         </div>
         <div className="card-body">
           <div className="row g-3">
-            <div className="col-md-9">
+            <div className="col-md-5">
               <label className="form-label">關鍵字</label>
               <input
                 className="form-control"
@@ -158,9 +175,25 @@ export function SupplyLocations() {
                 onChange={(e) => setKeyword(e.target.value)}
               />
             </div>
-            <div className="col-md-3 d-flex align-items-end">
-              <button type="button" className="btn btn-secondary w-100" onClick={() => setKeyword('')}>
-                <i className="bi bi-arrow-clockwise" /> 重設
+            <div className="col-md-3">
+              <label className="form-label">座標狀態</label>
+              <select className="form-select" value={coordFilter} onChange={(e) => setCoordFilter(e.target.value as '' | 'set' | 'unset')}>
+                <option value="">全部</option>
+                <option value="set">已設定經緯度</option>
+                <option value="unset">未設定經緯度</option>
+              </select>
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">聯絡資訊</label>
+              <select className="form-select" value={contactFilter} onChange={(e) => setContactFilter(e.target.value as '' | 'has' | 'none')}>
+                <option value="">全部</option>
+                <option value="has">已填聯絡人或電話</option>
+                <option value="none">未填聯絡資訊</option>
+              </select>
+            </div>
+            <div className="col-md-1 d-flex align-items-end">
+              <button type="button" className="btn btn-secondary w-100" onClick={resetFilters} title="重設">
+                <i className="bi bi-arrow-clockwise" />
               </button>
             </div>
           </div>
