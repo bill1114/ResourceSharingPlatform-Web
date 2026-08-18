@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
-import { deleteItemPhoto, itemPhotoUrl } from '../lib/imageUpload'
+import { deleteItemPhoto, itemPhotoUrl, itemPhotoDownloadUrl } from '../lib/imageUpload'
 import { Roles, AllStockTypes, stockTypeDisplayName, stockTypeBadgeClass } from '../lib/enums'
 import { locationColorStyle } from '../lib/colors'
 import type { SupplyItem, SupplyLocation } from '../types/db'
@@ -326,7 +326,13 @@ export function SupplyItems() {
                       <tr key={item.id}>
                         <td>
                           {url ? (
-                            <img src={url} alt={item.item_name} style={{ width: 48, height: 48, objectFit: 'cover' }} className="rounded border" />
+                            <a
+                              href={itemPhotoDownloadUrl(item) ?? url}
+                              download
+                              title="下載圖片（中文檔名）"
+                            >
+                              <img src={url} alt={item.item_name} style={{ width: 48, height: 48, objectFit: 'cover' }} className="rounded border" />
+                            </a>
                           ) : (
                             <i className="bi bi-image text-muted fs-3" />
                           )}

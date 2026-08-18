@@ -81,6 +81,43 @@ export function itemPhotoUrl(path: string | null | undefined): string | null {
   return data.publicUrl
 }
 
+// The human-facing Chinese filename the user actually wants:
+//   {種類}-{名稱}-{規格}-{數量}{單位}-{日期}{流水號}.{副檔名}
+//   e.g. 食品-飲用水-600ml-10瓶-20260818001.jpg
+// Supabase Storage keys can't hold this (non-ASCII → InvalidKey, see top of
+// file), so it is delivered as the *download* filename (Content-Disposition)
+// rather than the stored object key. 數量/日期/流水號 come from the ASCII key
+// (which embeds them at upload time: `...-{qty}-{yyyymmdd}-{seq}.ext`); the
+// Chinese 種類/名稱/規格/單位 come from the supply_item row. Older keys that
+// don't parse fall back to the row's current quantity and today's date.
+type PhotoNameFields = {
+  category: string
+  item_name: string
+  specification: string | null
+  quantity: number
+  unit: string | null
+  image_path: string | null | undefined
+}
+
+export function itemPhotoDownloadName(item: PhotoNameFields): string | null {
+  if (!item.image_path) return null
+  const ext = item.image_path.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+  const parsed = item.image_path.match(/-(\d+)-(\d{8})-(\d{3})\.[a-z0-9]+$/i)
+  const qty = parsed ? parsed[1] : String(item.quantity)
+  const dateSeq = parsed ? `${parsed[2]}${parsed[3]}` : new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const spec = item.specification?.trim() || '無'
+  return `${item.category}-${item.item_name}-${spec}-${qty}${item.unit ?? ''}-${dateSeq}.${ext}`
+}
+
+// Public URL that downloads/saves as the Chinese filename above (?download=…).
+// Use this for a download link; keep itemPhotoUrl() for inline <img src>.
+export function itemPhotoDownloadUrl(item: PhotoNameFields): string | null {
+  if (!item.image_path) return null
+  const download = itemPhotoDownloadName(item)
+  const { data } = supabase.storage.from('items').getPublicUrl(item.image_path, download ? { download } : {})
+  return data.publicUrl
+}
+
 export async function deleteItemPhoto(path: string | null | undefined): Promise<void> {
   if (!path) return
   await supabase.storage.from('items').remove([path])
