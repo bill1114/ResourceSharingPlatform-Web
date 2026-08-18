@@ -143,6 +143,21 @@ export async function attachAiPhotoToItem(
   }
 }
 
+// 編輯物資時替換照片：直接上傳到 items，鍵維持 itemPhotoDownloadName 可解析的
+// 格式（item{id}-{數量}-{日期}-{隨機序}.副檔名），隨機序避免同一天同物資重傳撞名。
+export async function uploadReplacementPhoto(
+  file: File,
+  item: { id: number; quantity: number }
+): Promise<{ path: string; error: string | null }> {
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const seq = String(Math.floor(Math.random() * 900) + 100)
+  const key = `item${item.id}-${item.quantity}-${dateStr}-${seq}.${ext}`
+  const { error } = await supabase.storage.from('items').upload(key, file, { upsert: false })
+  if (error) return { path: '', error: error.message }
+  return { path: key, error: null }
+}
+
 export async function deleteItemPhoto(path: string | null | undefined): Promise<void> {
   if (!path) return
   await supabase.storage.from('items').remove([path])

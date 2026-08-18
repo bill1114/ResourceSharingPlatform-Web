@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { locationColorStyle } from '../lib/colors'
 import { Roles, TransferStatuses, transferStatusBadgeClass, transferStatusDisplayName } from '../lib/enums'
@@ -13,6 +13,7 @@ export function SupplyTransferCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
   const [fromLocationId, setFromLocationId] = useState<number | null>(profile?.location_id ?? null)
@@ -32,6 +33,16 @@ export function SupplyTransferCreate() {
       setItems((itemRes.data ?? []) as SupplyItem[])
     })
   }, [])
+
+  // 物資清單「物資轉移」按鈕帶 ?supplyItemId= 進來時，預選來源據點與該筆物資。
+  useEffect(() => {
+    const id = searchParams.get('supplyItemId')
+    if (!id || items.length === 0) return
+    const target = items.find((x) => x.id === Number(id))
+    if (!target) return
+    setFromLocationId(target.location_id)
+    setLines([{ key: Date.now(), supplyItemId: target.id, transferQuantity: '' }])
+  }, [searchParams, items])
 
   const sourceItems = useMemo(() => items.filter((x) => x.location_id === fromLocationId), [items, fromLocationId])
 

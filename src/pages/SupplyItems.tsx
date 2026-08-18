@@ -2,12 +2,12 @@
 // Read-only list + filters + cross-location summary. Adding stock lives on the
 // dedicated 物資入庫 page (/stock-in) — the "物資入庫" button here just links
 // there — so the add form has a single implementation (SupplyItemForm).
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
-import { deleteItemPhoto, itemPhotoUrl, itemPhotoDownloadUrl } from '../lib/imageUpload'
-import { Roles, AllStockTypes, stockTypeDisplayName, stockTypeBadgeClass } from '../lib/enums'
+import { deleteItemPhoto, itemPhotoUrl, itemPhotoDownloadUrl, uploadReplacementPhoto } from '../lib/imageUpload'
+import { Roles, StockTypes, AllStockTypes, stockTypeDisplayName, stockTypeBadgeClass } from '../lib/enums'
 import { locationColorStyle } from '../lib/colors'
 import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation } from '../types/db'
@@ -42,11 +42,70 @@ function itemStatus(item: SupplyItem): { label: string; badgeClass: string } {
 export function SupplyItems() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
+  const isAdminOrCadre = isAdmin || profile?.role_name === Roles.Cadre
   const [searchParams] = useSearchParams()
   const [items, setItems] = useState<SupplyItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // 操作欄的三個彈窗：放大照片、詳細資料、編輯
+  const [photoPreview, setPhotoPreview] = useState<SupplyItem | null>(null)
+  const [detailsItem, setDetailsItem] = useState<SupplyItem | null>(null)
+  const [editItem, setEditItem] = useState<SupplyItem | null>(null)
+  const [editForm, setEditForm] = useState({ quantity: '', expirationDate: '', safetyStock: '', remark: '' })
+  const [editPhoto, setEditPhoto] = useState<File | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+
+  function openEdit(item: SupplyItem) {
+    setEditItem(item)
+    setEditForm({
+      quantity: String(item.quantity),
+      expirationDate: item.expiration_date ?? '',
+      safetyStock: String(item.safety_stock),
+      remark: item.remark ?? '',
+    })
+    setEditPhoto(null)
+  }
+
+  async function handleEditSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!editItem) return
+    setEditSaving(true)
+    setError(null)
+
+    let imagePath = editItem.image_path
+    if (editPhoto) {
+      const { path, error: upErr } = await uploadReplacementPhoto(editPhoto, { id: editItem.id, quantity: Number(editForm.quantity) })
+      if (upErr) {
+        setError(`圖片上傳失敗：${upErr}`)
+        setEditSaving(false)
+        return
+      }
+      if (editItem.image_path) await deleteItemPhoto(editItem.image_path)
+      imagePath = path
+    }
+
+    const { error: updErr } = await supabase
+      .from('supply_item')
+      .update({
+        quantity: Number(editForm.quantity),
+        expiration_date: editItem.stock_type === StockTypes.NoExpiry ? null : editForm.expirationDate || null,
+        safety_stock: Number(editForm.safetyStock) || 0,
+        remark: editForm.remark.trim() || null,
+        image_path: imagePath,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editItem.id)
+
+    setEditSaving(false)
+    if (updErr) {
+      setError(updErr.message)
+      return
+    }
+    setEditItem(null)
+    void load()
+  }
 
   // 篩選條件：關鍵字、據點、種類、庫存分類（分類快速切換 pills）
   const [keyword, setKeyword] = useState('')
@@ -328,13 +387,14 @@ export function SupplyItems() {
                       <tr key={item.id}>
                         <td>
                           {url ? (
-                            <a
-                              href={itemPhotoDownloadUrl(item) ?? url}
-                              download
-                              title="下載圖片（中文檔名）"
-                            >
-                              <img src={url} alt={item.item_name} style={{ width: 48, height: 48, objectFit: 'cover' }} className="rounded border" />
-                            </a>
+                            <img
+                              src={url}
+                              alt={item.item_name}
+                              style={{ width: 48, height: 48, objectFit: 'cover', cursor: 'zoom-in' }}
+                              className="rounded border"
+                              title="點擊放大檢視"
+                              onClick={() => setPhotoPreview(item)}
+                            />
                           ) : (
                             <i className="bi bi-image text-muted fs-3" />
                           )}
@@ -363,11 +423,26 @@ export function SupplyItems() {
                           <span className={`badge ${status.badgeClass}`}>{status.label}</span>
                         </td>
                         <td className="text-nowrap">
-                          {isAdmin && (
-                            <button className="btn btn-sm btn-outline-danger" onClick={() => void handleDelete(item)}>
-                              刪除
+                          <div className="btn-group btn-group-sm" role="group">
+                            <button className="btn btn-info" title="詳細資料" onClick={() => setDetailsItem(item)}>
+                              <i className="bi bi-eye" />
                             </button>
-                          )}
+                            {isAdminOrCadre && (
+                              <button className="btn btn-warning" title="編輯" onClick={() => openEdit(item)}>
+                                <i className="bi bi-pencil" />
+                              </button>
+                            )}
+                            {isAdminOrCadre && (
+                              <Link className="btn btn-primary" title="物資轉移" to={`/transfers/create?supplyItemId=${item.id}`}>
+                                <i className="bi bi-arrow-left-right" />
+                              </Link>
+                            )}
+                            {isAdmin && (
+                              <button className="btn btn-danger" title="刪除" onClick={() => void handleDelete(item)}>
+                                <i className="bi bi-trash" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
@@ -381,6 +456,179 @@ export function SupplyItems() {
           </div>
         </div>
       </div>
+
+      {/* 放大照片（點縮圖開啟；此處提供下載中文檔名） */}
+      {photoPreview && (
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.75)' }} onClick={() => setPhotoPreview(null)}>
+          <div className="modal-dialog modal-lg modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  {photoPreview.category}｜{photoPreview.item_name}
+                  {photoPreview.specification ? `｜${photoPreview.specification}` : ''}
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setPhotoPreview(null)} />
+              </div>
+              <div className="modal-body text-center bg-light">
+                <img src={itemPhotoUrl(photoPreview.image_path) ?? ''} alt={photoPreview.item_name} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }} />
+              </div>
+              <div className="modal-footer">
+                <a className="btn btn-outline-success" href={itemPhotoDownloadUrl(photoPreview) ?? '#'} download>
+                  <i className="bi bi-download" /> 下載（中文檔名）
+                </a>
+                <button type="button" className="btn btn-secondary" onClick={() => setPhotoPreview(null)}>
+                  關閉
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 詳細資料 */}
+      {detailsItem && (
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="bi bi-eye" /> 物資詳細資料
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setDetailsItem(null)} />
+              </div>
+              <div className="modal-body">
+                <dl className="row mb-0">
+                  <dt className="col-4">種類</dt>
+                  <dd className="col-8">{detailsItem.category}</dd>
+                  <dt className="col-4">名稱</dt>
+                  <dd className="col-8">{detailsItem.item_name}</dd>
+                  <dt className="col-4">規格</dt>
+                  <dd className="col-8">{detailsItem.specification ?? '無'}</dd>
+                  <dt className="col-4">數量</dt>
+                  <dd className="col-8">
+                    {detailsItem.quantity} {detailsItem.unit}
+                  </dd>
+                  <dt className="col-4">庫存分類</dt>
+                  <dd className="col-8">{stockTypeDisplayName(detailsItem.stock_type)}</dd>
+                  <dt className="col-4">有效期限</dt>
+                  <dd className="col-8">{detailsItem.expiration_date ?? '無期限'}</dd>
+                  <dt className="col-4">據點</dt>
+                  <dd className="col-8">{locationName(detailsItem.location_id)}</dd>
+                  <dt className="col-4">安全庫存</dt>
+                  <dd className="col-8">
+                    {detailsItem.safety_stock} {detailsItem.unit}
+                  </dd>
+                  <dt className="col-4">狀態</dt>
+                  <dd className="col-8">
+                    <span className={`badge ${itemStatus(detailsItem).badgeClass}`}>{itemStatus(detailsItem).label}</span>
+                  </dd>
+                  <dt className="col-4">備註</dt>
+                  <dd className="col-8">{detailsItem.remark ?? '—'}</dd>
+                </dl>
+                {itemPhotoUrl(detailsItem.image_path) && (
+                  <div className="text-center mt-3">
+                    <img
+                      src={itemPhotoUrl(detailsItem.image_path)!}
+                      alt=""
+                      style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain', cursor: 'zoom-in' }}
+                      title="點擊放大"
+                      onClick={() => {
+                        setPhotoPreview(detailsItem)
+                        setDetailsItem(null)
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setDetailsItem(null)}>
+                  關閉
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 編輯物資 */}
+      {editItem && (
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <form onSubmit={handleEditSubmit}>
+                <div className="modal-header">
+                  <h5 className="modal-title">
+                    <i className="bi bi-pencil" /> 編輯物資
+                  </h5>
+                  <button type="button" className="btn-close" onClick={() => setEditItem(null)} />
+                </div>
+                <div className="modal-body">
+                  <div className="alert alert-light border small mb-3">
+                    {editItem.category}｜{editItem.item_name}
+                    {editItem.specification ? `｜${editItem.specification}` : ''}｜{locationName(editItem.location_id)}
+                  </div>
+                  <div className="row">
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label">數量 *</label>
+                      <input
+                        className="form-control"
+                        type="number"
+                        min={0}
+                        required
+                        value={editForm.quantity}
+                        onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label">安全庫存</label>
+                      <input
+                        className="form-control"
+                        type="number"
+                        min={0}
+                        value={editForm.safetyStock}
+                        onChange={(e) => setEditForm({ ...editForm, safetyStock: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  {editItem.stock_type !== StockTypes.NoExpiry && (
+                    <div className="mb-3">
+                      <label className="form-label">有效期限</label>
+                      <input
+                        className="form-control"
+                        type="date"
+                        value={editForm.expirationDate}
+                        onChange={(e) => setEditForm({ ...editForm, expirationDate: e.target.value })}
+                      />
+                    </div>
+                  )}
+                  <div className="mb-3">
+                    <label className="form-label">更換圖片</label>
+                    <input
+                      className="form-control"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => setEditPhoto(e.target.files?.[0] ?? null)}
+                    />
+                    <div className="form-text">留空表示不更換</div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">備註</label>
+                    <textarea className="form-control" rows={2} value={editForm.remark} onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })} />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditItem(null)}>
+                    取消
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={editSaving}>
+                    {editSaving ? '儲存中…' : '儲存變更'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
