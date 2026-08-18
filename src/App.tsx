@@ -5,6 +5,7 @@ import { RoleGate } from './components/RoleGate'
 import { Login } from './pages/Login'
 import { SupplyLocations } from './pages/SupplyLocations'
 import { SupplyItems } from './pages/SupplyItems'
+import { StockIn } from './pages/StockIn'
 import { InventoryTypes } from './pages/InventoryTypes'
 import { Dashboard } from './pages/Dashboard'
 import { SupplyOutboundCreate, SupplyOutboundIndex } from './pages/SupplyOutbound'
@@ -32,6 +33,7 @@ function App() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/supply-items" element={<SupplyItems />} />
+        <Route path="/stock-in" element={<StockIn />} />
         <Route path="/supply-locations" element={<SupplyLocations />} />
         <Route
           path="/transfers/create"

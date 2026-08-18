@@ -53,6 +53,11 @@ export function AppShell() {
                     </li>
                     <li><hr className="dropdown-divider" /></li>
                     <li>
+                      <NavLink className="dropdown-item" to="/stock-in">
+                        <i className="bi bi-box-arrow-in-down" /> 物資入庫
+                      </NavLink>
+                    </li>
+                    <li>
                       <NavLink className="dropdown-item" to="/outbound/create">
                         <i className="bi bi-box-arrow-up" /> 物資出庫
                       </NavLink>
