@@ -45,14 +45,7 @@ function App() {
             </RoleGate>
           }
         />
-        <Route
-          path="/mobile/vision"
-          element={
-            <RoleGate roles={[Roles.Admin, Roles.Cadre]} fallback={<MobileNoAccess />}>
-              <MobileVision />
-            </RoleGate>
-          }
-        />
+        <Route path="/mobile/vision" element={<MobileVision />} />
       </Route>
 
       <Route
@@ -82,7 +75,7 @@ function App() {
         <Route path="/donations" element={<SupplyDonationIndex />} />
         <Route path="/disposals/create" element={<SupplyDisposalCreate />} />
         <Route path="/disposals" element={<SupplyDisposalIndex />} />
-        <Route path="/ai-stockin/create" element={<RoleGate roles={[Roles.Admin, Roles.Cadre]}><AIStockInCreate /></RoleGate>} />
+        <Route path="/ai-stockin/create" element={<AIStockInCreate />} />
         <Route path="/ai-stockin" element={<AIStockInIndex />} />
         <Route path="/engineering/mobile-features" element={<EngineeringRoute><MobileFeatures /></EngineeringRoute>} />
         <Route

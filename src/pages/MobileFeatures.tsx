@@ -8,14 +8,14 @@ import type { AIStockInLog, SupplyItem, SupplyLocation, SupplyTransferLog } from
 import './mobile-original.css'
 
 // [path, icon, title, description, requiresManage]. requiresManage=true means
-// the tile is only enabled for Admin/Cadre — matches the desktop nav: 查詢/領用
-// are open to all roles, 轉讓/影像入庫 are cadre-and-up. (捐贈/報廢 stay
-// desktop-only; the LINE menu deliberately doesn't carry them.)
+// the tile is only enabled for Admin/Cadre. 查詢/領用/影像入庫 are open to all
+// roles; only 物資轉讓 stays cadre-and-up. (捐贈/報廢 stay desktop-only; the
+// LINE menu deliberately doesn't carry them.)
 const features = [
   ['/mobile/inventory', '⌕', '物資查詢', '查看目前可用庫存與效期', false],
   ['/mobile/pickup', '▣', '物資領用', '快到期物資優先領用', false],
   ['/mobile/transfer', '⇄', '物資轉讓', '據點間轉移與到貨確認', true],
-  ['/mobile/vision', '▧', '影像入庫', '拍照辨識並核對入庫', true],
+  ['/mobile/vision', '▧', '影像入庫', '拍照辨識並核對入庫', false],
 ] as const
 
 function useMobileData() {
