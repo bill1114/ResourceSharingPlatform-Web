@@ -359,13 +359,13 @@ export function SupplyDonationIndex() {
                 <table className="table table-hover">
                   <thead className="table-light">
                     <tr>
-                      <th>捐贈時間</th>
+                      <th className="col-min">捐贈時間</th>
                       <th>物資名稱</th>
-                      <th>據點</th>
-                      <th>數量</th>
+                      <th className="col-min">據點</th>
+                      <th className="col-min">數量</th>
                       <th>捐贈者</th>
                       <th>聯絡方式</th>
-                      <th>操作人員</th>
+                      <th className="col-min">操作人員</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -384,24 +384,24 @@ export function SupplyDonationIndex() {
                     ) : (
                       filteredLogs.map((log) => (
                         <tr key={log.id}>
-                          <td>{new Date(log.donation_time).toLocaleString('zh-TW')}</td>
+                          <td className="col-min">{new Date(log.donation_time).toLocaleString('zh-TW')}</td>
                           <td>
                             <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
                             {itemOf(log.supply_item_id)?.specification ? (
                               <span className="text-muted"> ／{itemOf(log.supply_item_id)?.specification}</span>
                             ) : null}
                           </td>
-                          <td>
+                          <td className="col-min">
                             <span className="badge" style={locationColorStyle(log.location_id)}>
                               {locationName(log.location_id)}
                             </span>
                           </td>
-                          <td className="text-end">
+                          <td className="col-min">
                             {log.donation_quantity} {itemOf(log.supply_item_id)?.unit ?? ''}
                           </td>
                           <td>{log.donor_name}</td>
                           <td>{log.donor_contact}</td>
-                          <td>{log.operator}</td>
+                          <td className="col-min">{log.operator}</td>
                         </tr>
                       ))
                     )}

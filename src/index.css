@@ -33,3 +33,13 @@ body {
   padding: 0.4em 0.65em;
   font-weight: 600;
 }
+
+/* Record/list tables stretch to the container width. On wide screens the
+   browser spreads the extra width across every column, so a short column like
+   數量/時間 balloons and its content floats with an ugly gap. Marking the short
+   columns .col-min shrinks them to their content and lets the genuinely textual
+   columns (物資名稱/領用人/備註…) absorb the slack instead. */
+.col-min {
+  width: 1%;
+  white-space: nowrap;
+}
