@@ -118,6 +118,31 @@ export function itemPhotoDownloadUrl(item: PhotoNameFields): string | null {
   return data.publicUrl
 }
 
+// AI 影像入庫確認後，把暫存在 ai-stockin 的原始照片搬進 items 集中管理，並掛到剛
+// 入庫的批次上。刻意改在前端做（不靠 Edge Function 的手動部署）：確認者對自己上傳
+// 的 ai-stockin 檔有讀取權、對 items 有寫入權、對自己據點的 supply_item 有更新權，
+// 全走 RLS。實體檔名維持 ASCII（aiN-數量-日期-001.副檔名），可被 itemPhotoDownloadName
+// 解析出中文下載名。任何一步失敗都不影響入庫本身（庫存已寫入），只是照片沒搬成。
+export async function attachAiPhotoToItem(
+  item: { id: number; quantity: number; image_path: string | null | undefined } | null | undefined,
+  aiStockinPath: string | null | undefined
+): Promise<void> {
+  if (!item || !aiStockinPath || item.image_path) return
+  try {
+    const { data: blob } = await supabase.storage.from('ai-stockin').download(aiStockinPath)
+    if (!blob) return
+    const ext = aiStockinPath.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const key = `ai${item.id}-${item.quantity}-${dateStr}-001.${ext}`
+    const { error } = await supabase.storage.from('items').upload(key, blob, { contentType: blob.type || 'image/jpeg', upsert: false })
+    if (error) return
+    await supabase.from('supply_item').update({ image_path: key }).eq('id', item.id)
+    await supabase.storage.from('ai-stockin').remove([aiStockinPath])
+  } catch {
+    /* 照片搬移失敗不影響入庫 */
+  }
+}
+
 export async function deleteItemPhoto(path: string | null | undefined): Promise<void> {
   if (!path) return
   await supabase.storage.from('items').remove([path])
