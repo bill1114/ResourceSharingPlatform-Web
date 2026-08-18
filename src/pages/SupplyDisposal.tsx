@@ -246,6 +246,7 @@ export function SupplyDisposalCreate() {
 export function SupplyDisposalIndex() {
   const [logs, setLogs] = useState<SupplyDisposalLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
+  const [items, setItems] = useState<SupplyItem[]>([])
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [reasonFilter, setReasonFilter] = useState('')
@@ -254,16 +255,22 @@ export function SupplyDisposalIndex() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [logRes, locRes] = await Promise.all([
+      const [logRes, locRes, itemRes] = await Promise.all([
         supabase.from('supply_disposal_log').select('*').order('disposal_time', { ascending: false }).limit(100),
         supabase.from('supply_location').select('*'),
+        supabase.from('supply_item').select('id, item_name, specification, unit'),
       ])
       setLogs((logRes.data ?? []) as SupplyDisposalLog[])
       setLocations((locRes.data ?? []) as SupplyLocation[])
+      setItems((itemRes.data ?? []) as SupplyItem[])
       setLoading(false)
     }
     void load()
   }, [])
+
+  function itemOf(id: number): SupplyItem | undefined {
+    return items.find((i) => i.id === id)
+  }
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -271,12 +278,16 @@ export function SupplyDisposalIndex() {
       if (reasonFilter && log.reason !== reasonFilter) return false
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase()
-        const matches = (log.remark ?? '').toLowerCase().includes(k) || (log.operator ?? '').toLowerCase().includes(k)
+        const matches =
+          (log.remark ?? '').toLowerCase().includes(k) ||
+          (log.operator ?? '').toLowerCase().includes(k) ||
+          (itemOf(log.supply_item_id)?.item_name ?? '').toLowerCase().includes(k)
         if (!matches) return false
       }
       return true
     })
-  }, [logs, keyword, locationFilter, reasonFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs, keyword, locationFilter, reasonFilter, items])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -284,9 +295,14 @@ export function SupplyDisposalIndex() {
 
   return (
     <div className="container-fluid mt-4">
-      <h2 className="mb-4">
-        <i className="bi bi-list-ul" /> 物資報廢紀錄
-      </h2>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2 className="mb-0">
+          <i className="bi bi-list-ul" /> 物資報廢紀錄
+        </h2>
+        <Link className="btn btn-primary" to="/disposals/create">
+          <i className="bi bi-plus-circle" /> 新增報廢
+        </Link>
+      </div>
       <FlashMessage />
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">
@@ -343,6 +359,7 @@ export function SupplyDisposalIndex() {
               <thead className="table-light">
                 <tr>
                   <th>報廢時間</th>
+                  <th>物資名稱</th>
                   <th>據點</th>
                   <th>數量</th>
                   <th>原因</th>
@@ -353,13 +370,13 @@ export function SupplyDisposalIndex() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="text-center text-muted py-4">
+                    <td colSpan={7} className="text-center text-muted py-4">
                       載入中…
                     </td>
                   </tr>
                 ) : filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center text-muted py-4">
+                    <td colSpan={7} className="text-center text-muted py-4">
                       沒有符合條件的報廢紀錄
                     </td>
                   </tr>
@@ -368,11 +385,19 @@ export function SupplyDisposalIndex() {
                     <tr key={log.id}>
                       <td>{new Date(log.disposal_time).toLocaleString('zh-TW')}</td>
                       <td>
+                        <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
+                        {itemOf(log.supply_item_id)?.specification ? (
+                          <span className="text-muted"> ／{itemOf(log.supply_item_id)?.specification}</span>
+                        ) : null}
+                      </td>
+                      <td>
                         <span className="badge" style={locationColorStyle(log.location_id)}>
                           {locationName(log.location_id)}
                         </span>
                       </td>
-                      <td className="text-end">{log.disposal_quantity}</td>
+                      <td className="text-end">
+                        {log.disposal_quantity} {itemOf(log.supply_item_id)?.unit ?? ''}
+                      </td>
                       <td>
                         <span className={`badge ${disposalReasonBadgeClass(log.reason)}`}>{disposalReasonDisplayName(log.reason)}</span>
                       </td>

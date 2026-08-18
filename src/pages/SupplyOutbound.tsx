@@ -266,6 +266,7 @@ export function SupplyOutboundCreate() {
 export function SupplyOutboundIndex() {
   const [logs, setLogs] = useState<SupplyOutboundLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
+  const [items, setItems] = useState<SupplyItem[]>([])
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [loading, setLoading] = useState(true)
@@ -273,27 +274,42 @@ export function SupplyOutboundIndex() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [logRes, locRes] = await Promise.all([
+      const [logRes, locRes, itemRes] = await Promise.all([
         supabase.from('supply_outbound_log').select('*').order('outbound_time', { ascending: false }).limit(100),
         supabase.from('supply_location').select('*'),
+        supabase.from('supply_item').select('id, item_name, specification, unit'),
       ])
       setLogs((logRes.data ?? []) as SupplyOutboundLog[])
       setLocations((locRes.data ?? []) as SupplyLocation[])
+      setItems((itemRes.data ?? []) as SupplyItem[])
       setLoading(false)
     }
     void load()
   }, [])
+
+  function itemOf(id: number): SupplyItem | undefined {
+    return items.find((i) => i.id === id)
+  }
 
   const filtered = useMemo(() => {
     return logs.filter((l) => {
       if (locationFilter && l.location_id !== Number(locationFilter)) return false
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase()
-        if (!l.recipient_name.toLowerCase().includes(k) && !(l.recipient_contact ?? '').toLowerCase().includes(k)) return false
+        const name = itemOf(l.supply_item_id)?.item_name ?? ''
+        if (
+          !l.recipient_name.toLowerCase().includes(k) &&
+          !(l.recipient_contact ?? '').toLowerCase().includes(k) &&
+          !(l.operator ?? '').toLowerCase().includes(k) &&
+          !(l.remark ?? '').toLowerCase().includes(k) &&
+          !name.toLowerCase().includes(k)
+        )
+          return false
       }
       return true
     })
-  }, [logs, keyword, locationFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs, keyword, locationFilter, items])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -301,9 +317,19 @@ export function SupplyOutboundIndex() {
 
   return (
     <div className="container-fluid mt-4">
-      <h2 className="mb-4">
-        <i className="bi bi-list-ul" /> 物資出庫紀錄
-      </h2>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2 className="mb-0">
+          <i className="bi bi-list-ul" /> 物資出庫紀錄
+        </h2>
+        <div className="d-flex gap-2">
+          <Link className="btn btn-outline-primary" to="/outbound/recipient-analysis">
+            <i className="bi bi-graph-up" /> 查看領取分析
+          </Link>
+          <Link className="btn btn-primary" to="/outbound/create">
+            <i className="bi bi-plus-circle" /> 新增出庫
+          </Link>
+        </div>
+      </div>
       <FlashMessage />
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">
@@ -348,6 +374,7 @@ export function SupplyOutboundIndex() {
               <thead className="table-light">
                 <tr>
                   <th>出庫時間</th>
+                  <th>物資名稱</th>
                   <th>來源據點</th>
                   <th>出庫數量</th>
                   <th>領用人</th>
@@ -359,13 +386,13 @@ export function SupplyOutboundIndex() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
+                    <td colSpan={8} className="text-center text-muted py-4">
                       載入中…
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
+                    <td colSpan={8} className="text-center text-muted py-4">
                       沒有符合條件的出庫紀錄
                     </td>
                   </tr>
@@ -374,12 +401,18 @@ export function SupplyOutboundIndex() {
                     <tr key={log.id}>
                       <td>{new Date(log.outbound_time).toLocaleString('zh-TW')}</td>
                       <td>
+                        <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
+                        {itemOf(log.supply_item_id)?.specification ? (
+                          <span className="text-muted"> ／{itemOf(log.supply_item_id)?.specification}</span>
+                        ) : null}
+                      </td>
+                      <td>
                         <span className="badge" style={locationColorStyle(log.location_id)}>
                           {locationName(log.location_id)}
                         </span>
                       </td>
                       <td className="text-end">
-                        <strong>{log.outbound_quantity}</strong>
+                        <strong>{log.outbound_quantity}</strong> {itemOf(log.supply_item_id)?.unit ?? ''}
                       </td>
                       <td>{log.recipient_name}</td>
                       <td>{log.recipient_contact}</td>

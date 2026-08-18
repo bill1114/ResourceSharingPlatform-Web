@@ -11,7 +11,7 @@ import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
 import { StockBatchPicker } from '../components/StockBatchPicker'
 import { FlashMessage } from '../components/FlashMessage'
-import type { SupplyLocation, SupplyDonationLog } from '../types/db'
+import type { SupplyItem, SupplyLocation, SupplyDonationLog } from '../types/db'
 
 interface DonorSummaryRow {
   donor_name: string
@@ -228,6 +228,7 @@ export function SupplyDonationCreate() {
 export function SupplyDonationIndex() {
   const [logs, setLogs] = useState<SupplyDonationLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
+  const [items, setItems] = useState<SupplyItem[]>([])
   const [donorSummary, setDonorSummary] = useState<DonorSummaryRow[]>([])
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
@@ -236,18 +237,24 @@ export function SupplyDonationIndex() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [logRes, locRes, summaryRes] = await Promise.all([
+      const [logRes, locRes, itemRes, summaryRes] = await Promise.all([
         supabase.from('supply_donation_log').select('*').order('donation_time', { ascending: false }).limit(100),
         supabase.from('supply_location').select('*'),
+        supabase.from('supply_item').select('id, item_name, specification, unit'),
         supabase.from('donor_leaderboard_view').select('*').order('pickup_count', { ascending: false }),
       ])
       setLogs((logRes.data ?? []) as SupplyDonationLog[])
       setLocations((locRes.data ?? []) as SupplyLocation[])
+      setItems((itemRes.data ?? []) as SupplyItem[])
       setDonorSummary((summaryRes.data ?? []) as DonorSummaryRow[])
       setLoading(false)
     }
     void load()
   }, [])
+
+  function itemOf(id: number): SupplyItem | undefined {
+    return items.find((i) => i.id === id)
+  }
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -257,12 +264,14 @@ export function SupplyDonationIndex() {
         const matches =
           log.donor_name.toLowerCase().includes(k) ||
           (log.donor_contact ?? '').toLowerCase().includes(k) ||
-          (log.operator ?? '').toLowerCase().includes(k)
+          (log.operator ?? '').toLowerCase().includes(k) ||
+          (itemOf(log.supply_item_id)?.item_name ?? '').toLowerCase().includes(k)
         if (!matches) return false
       }
       return true
     })
-  }, [logs, keyword, locationFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs, keyword, locationFilter, items])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -270,9 +279,14 @@ export function SupplyDonationIndex() {
 
   return (
     <div className="container-fluid mt-4">
-      <h2 className="mb-4">
-        <i className="bi bi-award" /> 捐贈紀錄
-      </h2>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2 className="mb-0">
+          <i className="bi bi-award" /> 捐贈紀錄
+        </h2>
+        <Link className="btn btn-primary" to="/donations/create">
+          <i className="bi bi-plus-circle" /> 新增捐贈登記
+        </Link>
+      </div>
       <FlashMessage />
 
       <div className="card shadow-sm mb-3">
@@ -326,6 +340,7 @@ export function SupplyDonationIndex() {
                   <thead className="table-light">
                     <tr>
                       <th>捐贈時間</th>
+                      <th>物資名稱</th>
                       <th>據點</th>
                       <th>數量</th>
                       <th>捐贈者</th>
@@ -336,13 +351,13 @@ export function SupplyDonationIndex() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted py-4">
+                        <td colSpan={7} className="text-center text-muted py-4">
                           載入中…
                         </td>
                       </tr>
                     ) : filteredLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted py-4">
+                        <td colSpan={7} className="text-center text-muted py-4">
                           沒有符合條件的捐贈紀錄
                         </td>
                       </tr>
@@ -351,11 +366,19 @@ export function SupplyDonationIndex() {
                         <tr key={log.id}>
                           <td>{new Date(log.donation_time).toLocaleString('zh-TW')}</td>
                           <td>
+                            <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
+                            {itemOf(log.supply_item_id)?.specification ? (
+                              <span className="text-muted"> ／{itemOf(log.supply_item_id)?.specification}</span>
+                            ) : null}
+                          </td>
+                          <td>
                             <span className="badge" style={locationColorStyle(log.location_id)}>
                               {locationName(log.location_id)}
                             </span>
                           </td>
-                          <td className="text-end">{log.donation_quantity}</td>
+                          <td className="text-end">
+                            {log.donation_quantity} {itemOf(log.supply_item_id)?.unit ?? ''}
+                          </td>
                           <td>{log.donor_name}</td>
                           <td>{log.donor_contact}</td>
                           <td>{log.operator}</td>
