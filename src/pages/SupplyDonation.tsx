@@ -11,6 +11,7 @@ import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
 import { StockBatchPicker } from '../components/StockBatchPicker'
 import { FlashMessage } from '../components/FlashMessage'
+import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation, SupplyDonationLog } from '../types/db'
 
 interface DonorSummaryRow {
@@ -277,15 +278,34 @@ export function SupplyDonationIndex() {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
   }
 
+  function handleExport() {
+    exportToExcel<SupplyDonationLog>('捐贈紀錄', '捐贈紀錄', [
+      { header: '捐贈時間', value: (l) => new Date(l.donation_time).toLocaleString('zh-TW') },
+      { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
+      { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
+      { header: '據點', value: (l) => locationName(l.location_id) },
+      { header: '數量', value: (l) => l.donation_quantity },
+      { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
+      { header: '捐贈者', value: (l) => l.donor_name },
+      { header: '聯絡方式', value: (l) => l.donor_contact ?? '' },
+      { header: '操作人員', value: (l) => l.operator ?? '' },
+    ], filteredLogs)
+  }
+
   return (
     <div className="container-fluid mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="mb-0">
           <i className="bi bi-award" /> 捐贈紀錄
         </h2>
-        <Link className="btn btn-primary" to="/donations/create">
-          <i className="bi bi-plus-circle" /> 新增捐贈登記
-        </Link>
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-success" onClick={handleExport} disabled={filteredLogs.length === 0}>
+            <i className="bi bi-file-earmark-excel" /> 匯出 Excel
+          </button>
+          <Link className="btn btn-primary" to="/donations/create">
+            <i className="bi bi-plus-circle" /> 新增捐贈登記
+          </Link>
+        </div>
       </div>
       <FlashMessage />
 

@@ -13,6 +13,7 @@ import { Roles } from '../lib/enums'
 import { ExpiringItemsPanel, StockBatchPicker } from '../components/StockBatchPicker'
 import { fetchExpiringItems } from '../lib/stockBatch'
 import { FlashMessage } from '../components/FlashMessage'
+import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation, SupplyOutboundLog } from '../types/db'
 
 export function SupplyOutboundCreate() {
@@ -315,6 +316,21 @@ export function SupplyOutboundIndex() {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
   }
 
+  function handleExport() {
+    exportToExcel<SupplyOutboundLog>('出庫紀錄', '出庫紀錄', [
+      { header: '出庫時間', value: (l) => new Date(l.outbound_time).toLocaleString('zh-TW') },
+      { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
+      { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
+      { header: '來源據點', value: (l) => locationName(l.location_id) },
+      { header: '出庫數量', value: (l) => l.outbound_quantity },
+      { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
+      { header: '領用人', value: (l) => l.recipient_name },
+      { header: '聯絡方式', value: (l) => l.recipient_contact ?? '' },
+      { header: '操作人員', value: (l) => l.operator ?? '' },
+      { header: '備註', value: (l) => l.remark ?? '' },
+    ], filtered)
+  }
+
   return (
     <div className="container-fluid mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -322,6 +338,9 @@ export function SupplyOutboundIndex() {
           <i className="bi bi-list-ul" /> 物資出庫紀錄
         </h2>
         <div className="d-flex gap-2">
+          <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
+            <i className="bi bi-file-earmark-excel" /> 匯出 Excel
+          </button>
           <Link className="btn btn-outline-primary" to="/outbound/recipient-analysis">
             <i className="bi bi-graph-up" /> 查看領取分析
           </Link>

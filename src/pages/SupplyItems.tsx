@@ -10,6 +10,7 @@ import { deleteItemPhoto, itemPhotoUrl, itemPhotoDownloadUrl, uploadReplacementP
 import { Roles, StockTypes, AllStockTypes, stockTypeDisplayName, stockTypeBadgeClass } from '../lib/enums'
 import { locationColorStyle } from '../lib/colors'
 import { FlashMessage } from '../components/FlashMessage'
+import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
 interface ItemSummaryRow {
@@ -206,6 +207,22 @@ export function SupplyItems() {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
   }
 
+  function handleExport() {
+    exportToExcel<SupplyItem>('物資清單', '物資清單', [
+      { header: '種類', value: (i) => i.category },
+      { header: '名稱', value: (i) => i.item_name },
+      { header: '規格', value: (i) => i.specification ?? '' },
+      { header: '數量', value: (i) => i.quantity },
+      { header: '單位', value: (i) => i.unit ?? '' },
+      { header: '庫存分類', value: (i) => stockTypeDisplayName(i.stock_type) },
+      { header: '有效期限', value: (i) => i.expiration_date ?? '' },
+      { header: '據點', value: (i) => locationName(i.location_id) },
+      { header: '安全庫存', value: (i) => i.safety_stock },
+      { header: '狀態', value: (i) => itemStatus(i).label },
+      { header: '備註', value: (i) => i.remark ?? '' },
+    ], filteredItems)
+  }
+
   async function handleDelete(item: SupplyItem) {
     if (!confirm(`確定刪除「${item.item_name}」這筆物資嗎？`)) return
     const { error } = await supabase.from('supply_item').update({ is_active: false }).eq('id', item.id)
@@ -223,9 +240,14 @@ export function SupplyItems() {
         <h2>
           <i className="bi bi-box" /> 物資管理
         </h2>
-        <Link className="btn btn-primary" to="/stock-in">
-          <i className="bi bi-box-arrow-in-down" /> 物資入庫
-        </Link>
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-success" onClick={handleExport} disabled={filteredItems.length === 0}>
+            <i className="bi bi-file-earmark-excel" /> 匯出 Excel
+          </button>
+          <Link className="btn btn-primary" to="/stock-in">
+            <i className="bi bi-box-arrow-in-down" /> 物資入庫
+          </Link>
+        </div>
       </div>
 
       <FlashMessage />
