@@ -1,20 +1,25 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 export function Login() {
   const { session, signIn } = useAuth()
-  const navigate = useNavigate()
   const location = useLocation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Already logged in — bounce straight to Dashboard (mirrors AccountController's
-  // GET /Account/Login redirect-if-authenticated behavior).
+  // Where to go once authenticated: the page the user originally requested
+  // (set by ProtectedRoute when it bounced them here), else the dashboard.
+  // This must drive the "already logged in" redirect too — otherwise a LINE
+  // user opening a /mobile/* link would land on the dashboard instead of the
+  // feature they tapped, because signing in flips `session` true and this
+  // guard re-renders before anything else can navigate.
+  const from = (location.state as { from?: string })?.from ?? '/'
+
   if (session) {
-    return <Navigate to="/" replace />
+    return <Navigate to={from} replace />
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -25,10 +30,8 @@ export function Login() {
     setSubmitting(false)
     if (error) {
       setError(error)
-      return
     }
-    const from = (location.state as { from?: string })?.from ?? '/'
-    navigate(from, { replace: true })
+    // On success `session` becomes truthy and the guard above redirects to `from`.
   }
 
   return (
