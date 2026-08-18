@@ -41,41 +41,20 @@ export function AppShell() {
                     <i className="bi bi-speedometer2" /> 戰情總覽
                   </NavLink>
                 </li>
-                <li className="nav-item">
-                  <NavLink className="nav-link text-white" to="/supply-items">
-                    <i className="bi bi-box" /> 物資管理
-                  </NavLink>
-                </li>
-                <li className="nav-item">
-                  <NavLink className="nav-link text-white" to="/supply-locations">
-                    <i className="bi bi-buildings" /> 據點管理
-                  </NavLink>
-                </li>
                 <li className="nav-item dropdown">
                   <a className="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
-                    <i className="bi bi-arrow-left-right" /> 物資異動
+                    <i className="bi bi-box" /> 物資管理
                   </a>
                   <ul className="dropdown-menu">
-                    {isAdminOrCadre && (
-                      <li>
-                        <NavLink className="dropdown-item" to="/transfers/create">
-                          <i className="bi bi-arrow-left-right" /> 物資轉移
-                        </NavLink>
-                      </li>
-                    )}
                     <li>
-                      <NavLink className="dropdown-item" to="/transfers">
-                        <i className="bi bi-list-ul" /> 轉移紀錄
+                      <NavLink className="dropdown-item" to="/supply-items">
+                        <i className="bi bi-boxes" /> 物資清單
                       </NavLink>
                     </li>
+                    <li><hr className="dropdown-divider" /></li>
                     <li>
                       <NavLink className="dropdown-item" to="/outbound/create">
                         <i className="bi bi-box-arrow-up" /> 物資出庫
-                      </NavLink>
-                    </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/outbound">
-                        <i className="bi bi-list-ul" /> 出庫紀錄
                       </NavLink>
                     </li>
                     <li>
@@ -84,28 +63,58 @@ export function AppShell() {
                       </NavLink>
                     </li>
                     <li>
-                      <NavLink className="dropdown-item" to="/donations">
-                        <i className="bi bi-award" /> 捐贈紀錄
-                      </NavLink>
-                    </li>
-                    <li>
                       <NavLink className="dropdown-item" to="/disposals/create">
                         <i className="bi bi-trash3" /> 物資報廢
                       </NavLink>
                     </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/disposals">
-                        <i className="bi bi-list-ul" /> 報廢紀錄
-                      </NavLink>
-                    </li>
+                    {isAdminOrCadre && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/transfers/create">
+                          <i className="bi bi-arrow-left-right" /> 物資轉移
+                        </NavLink>
+                      </li>
+                    )}
                     <li>
                       <NavLink className="dropdown-item" to="/ai-stockin/create">
                         <i className="bi bi-stars" /> AI 智慧入庫
                       </NavLink>
                     </li>
+                  </ul>
+                </li>
+                <li className="nav-item dropdown">
+                  <a className="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
+                    <i className="bi bi-journal-text" /> 紀錄查詢
+                  </a>
+                  <ul className="dropdown-menu">
+                    <li>
+                      <NavLink className="dropdown-item" to="/outbound">
+                        <i className="bi bi-box-arrow-up" /> 出庫紀錄
+                      </NavLink>
+                    </li>
+                    <li>
+                      <NavLink className="dropdown-item" to="/donations">
+                        <i className="bi bi-award" /> 捐贈紀錄
+                      </NavLink>
+                    </li>
+                    <li>
+                      <NavLink className="dropdown-item" to="/disposals">
+                        <i className="bi bi-trash3" /> 報廢紀錄
+                      </NavLink>
+                    </li>
+                    <li>
+                      <NavLink className="dropdown-item" to="/transfers">
+                        <i className="bi bi-arrow-left-right" /> 轉移紀錄
+                      </NavLink>
+                    </li>
                     <li>
                       <NavLink className="dropdown-item" to="/ai-stockin">
-                        <i className="bi bi-list-ul" /> AI 辨識紀錄
+                        <i className="bi bi-stars" /> AI 辨識紀錄
+                      </NavLink>
+                    </li>
+                    <li><hr className="dropdown-divider" /></li>
+                    <li>
+                      <NavLink className="dropdown-item" to="/outbound/recipient-analysis">
+                        <i className="bi bi-graph-up" /> 領取分析
                       </NavLink>
                     </li>
                   </ul>
@@ -117,18 +126,6 @@ export function AppShell() {
                     </NavLink>
                   </li>
                 )}
-                <li className="nav-item dropdown">
-                  <a className="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
-                    <i className="bi bi-graph-up" /> 分析報表
-                  </a>
-                  <ul className="dropdown-menu">
-                    <li>
-                      <NavLink className="dropdown-item" to="/outbound/recipient-analysis">
-                        <i className="bi bi-graph-up" /> 領取分析
-                      </NavLink>
-                    </li>
-                  </ul>
-                </li>
                 {isAdmin && (
                   <li className="nav-item dropdown">
                     <a className="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
@@ -138,6 +135,11 @@ export function AppShell() {
                       <li>
                         <NavLink className="dropdown-item" to="/admin/accounts">
                           <i className="bi bi-people" /> 帳號管理
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink className="dropdown-item" to="/supply-locations">
+                          <i className="bi bi-buildings" /> 據點管理
                         </NavLink>
                       </li>
                       <li>
