@@ -1,10 +1,15 @@
-// Port of SupplyDonationController + Views/SupplyDonation/{Create,Index}.cshtml.
+// 物資捐贈 — Create 與出庫／報廢共用同一套版型（StockBatchPicker + 左表單右說明）。
+// 捐贈沒有即期快選面板：捐進快過期的批次不是該優先做的事。
+// 寫入走 donation-create Edge Function；Index 只是一個受 RLS 限縮的 SELECT。
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
+import { functionErrorMessage } from '../lib/functionError'
 import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
+import { StockBatchPicker } from '../components/StockBatchPicker'
 import type { SupplyLocation, SupplyDonationLog } from '../types/db'
 
 interface DonorSummaryRow {
@@ -19,17 +24,22 @@ interface DonorSummaryRow {
 export function SupplyDonationCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
+
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [locationId, setLocationId] = useState<number | null>(profile?.location_id ?? null)
+  const [stockTypeFilter, setStockTypeFilter] = useState('')
+
+  const [quantity, setQuantity] = useState('')
   const [donorName, setDonorName] = useState('')
   const [donorContact, setDonorContact] = useState('')
-  const [quantity, setQuantity] = useState('')
   const [remark, setRemark] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const picker = useItemPicker(locationId)
+  const picker = useItemPicker(locationId, stockTypeFilter || undefined)
+  const selected = picker.currentItem
+  const operatorName = profile?.display_name ?? profile?.username ?? ''
 
   useEffect(() => {
     supabase
@@ -40,28 +50,44 @@ export function SupplyDonationCreate() {
       .then(({ data }) => setLocations((data ?? []) as SupplyLocation[]))
   }, [])
 
+  // 切換分類後已選的物資可能不在範圍內，直接清空已選內容。
+  function changeStockType(value: string) {
+    setStockTypeFilter(value)
+    picker.reset()
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
     setSuccess(null)
-    if (!locationId || !picker.itemId) {
+
+    if (!locationId || !selected) {
       setError('請選擇據點與物資')
       return
     }
+    const qty = Number(quantity)
+    if (!Number.isInteger(qty) || qty <= 0) {
+      setError('捐贈數量必須是大於 0 的整數')
+      return
+    }
+
     setSubmitting(true)
-    const { data, error } = await supabase.functions.invoke('donation-create', {
+    const { data, error: invokeError } = await supabase.functions.invoke('donation-create', {
       body: {
-        supplyItemId: picker.itemId,
+        supplyItemId: selected.id,
         locationId,
-        donationQuantity: Number(quantity),
+        donationQuantity: qty,
         donorName,
         donorContact,
         remark,
       },
     })
     setSubmitting(false)
-    if (error || !data?.success) {
-      setError(data?.message ?? error?.message ?? '捐贈失敗')
+
+    // 失敗時要拿 Edge Function 自己的中文訊息：supabase-js 會把非 2xx 的內容
+    // 換成 "non-2xx status code"，真正的原因藏在 response body 裡。
+    if (invokeError || !data?.success) {
+      setError(data?.message ?? (await functionErrorMessage(invokeError, '捐贈失敗')))
       return
     }
     setSuccess(data.message)
@@ -69,107 +95,133 @@ export function SupplyDonationCreate() {
     setDonorContact('')
     setQuantity('')
     setRemark('')
-    picker.setItemId(null)
+    picker.reload()
   }
 
   return (
-    <div className="container mt-4">
-      <h2>
-        <i className="bi bi-gift" /> 物資捐贈
-      </h2>
+    <div className="container-fluid mt-4">
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <h2 className="mb-0">
+          <i className="bi bi-gift" /> 物資捐贈（入庫）
+        </h2>
+        <Link className="btn btn-outline-secondary" to="/donations">
+          <i className="bi bi-list-ul" /> 捐贈紀錄
+        </Link>
+      </div>
       <hr />
+
       {error && <div className="alert alert-danger">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
-      <div className="card shadow-sm">
-        <div className="card-body">
-          <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label className="form-label">據點 *</label>
-              {isAdmin ? (
-                <select
-                  className="form-select"
-                  required
-                  value={locationId ?? ''}
-                  onChange={(e) => setLocationId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">請選擇據點</option>
-                  {locations.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.location_name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input className="form-control" disabled value={locations.find((l) => l.id === locationId)?.location_name ?? ''} />
-              )}
+
+      <div className="row g-4">
+        <div className="col-lg-8">
+          <div className="card shadow-sm">
+            <div className="card-body">
+              <form onSubmit={handleSubmit}>
+                <StockBatchPicker
+                  isAdmin={isAdmin}
+                  locations={locations}
+                  locationId={locationId}
+                  onLocationChange={setLocationId}
+                  stockTypeFilter={stockTypeFilter}
+                  onStockTypeChange={changeStockType}
+                  picker={picker}
+                />
+
+                <div className="mb-3">
+                  <label className="form-label">捐贈數量 *</label>
+                  <input
+                    className="form-control"
+                    type="number"
+                    min={1}
+                    required
+                    disabled={!selected}
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                  {selected && (
+                    <div className="form-text">
+                      入庫後將成為 {selected.quantity + (Number(quantity) || 0)} {selected.unit}
+                    </div>
+                  )}
+                </div>
+
+                <div className="row">
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">捐贈者姓名 *</label>
+                    <input
+                      className="form-control"
+                      required
+                      maxLength={50}
+                      placeholder="例如：陳先生／某某企業"
+                      value={donorName}
+                      onChange={(e) => setDonorName(e.target.value)}
+                    />
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">捐贈者聯絡方式</label>
+                    <input
+                      className="form-control"
+                      maxLength={50}
+                      placeholder="例如：手機或地址"
+                      value={donorContact}
+                      onChange={(e) => setDonorContact(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label">操作人員</label>
+                  <input className="form-control" disabled value={operatorName} />
+                  <div className="form-text">系統會自動記錄目前登入帳號為操作人員。</div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label">備註</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    placeholder="捐贈來源或其他說明"
+                    value={remark}
+                    onChange={(e) => setRemark(e.target.value)}
+                  />
+                </div>
+
+                <div className="d-flex gap-2">
+                  <button type="submit" className="btn btn-primary btn-lg" disabled={submitting || !selected}>
+                    <i className="bi bi-check-circle" /> {submitting ? '處理中…' : '確認捐贈'}
+                  </button>
+                  <Link className="btn btn-secondary btn-lg" to="/donations">
+                    ← 返回紀錄
+                  </Link>
+                </div>
+              </form>
             </div>
-            <div className="row">
-              <div className="col-md-4 mb-3">
-                <label className="form-label">物資種類 *</label>
-                <select className="form-select" required value={picker.category} onChange={(e) => picker.setCategory(e.target.value)}>
-                  <option value="">請選擇物資種類</option>
-                  {picker.categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-4 mb-3">
-                <label className="form-label">物資名稱 *</label>
-                <select
-                  className="form-select"
-                  required
-                  disabled={!picker.category}
-                  value={picker.itemName}
-                  onChange={(e) => picker.setItemName(e.target.value)}
-                >
-                  <option value="">請先選擇物資種類</option>
-                  {picker.itemNames.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-4 mb-3">
-                <label className="form-label">規格／批次 *</label>
-                <select
-                  className="form-select"
-                  required
-                  disabled={!picker.itemName}
-                  value={picker.itemId ?? ''}
-                  onChange={(e) => picker.setItemId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">請先選擇物資名稱</option>
-                  {picker.batches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {picker.batchLabel(b)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="mb-3">
-              <label className="form-label">捐贈數量 *</label>
-              <input className="form-control" type="number" min={1} required value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-            </div>
-            <div className="mb-3">
-              <label className="form-label">捐贈者姓名 *</label>
-              <input className="form-control" required value={donorName} onChange={(e) => setDonorName(e.target.value)} />
-            </div>
-            <div className="mb-3">
-              <label className="form-label">聯絡方式</label>
-              <input className="form-control" value={donorContact} onChange={(e) => setDonorContact(e.target.value)} />
-            </div>
-            <div className="mb-3">
-              <label className="form-label">備註</label>
-              <textarea className="form-control" rows={2} value={remark} onChange={(e) => setRemark(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-primary btn-lg" disabled={submitting}>
-              {submitting ? '處理中…' : '確認捐贈'}
-            </button>
-          </form>
+          </div>
+        </div>
+
+        <div className="col-lg-4">
+          <div className="alert alert-info">
+            <strong>
+              <i className="bi bi-info-circle" /> 捐贈說明
+            </strong>
+            <ul className="mb-0 mt-2">
+              <li>先選擇據點，物資選單會自動只顯示該據點的物資</li>
+              <li>可搭配分類快速篩選（無效期／有效期／冷凍食品）</li>
+              <li>捐贈會把數量加到選定的既有批次上</li>
+              <li>全新品項或不同效期請改用「物資入庫」建立批次</li>
+            </ul>
+          </div>
+          <div className="alert alert-warning">
+            <strong>
+              <i className="bi bi-exclamation-triangle" /> 注意事項
+            </strong>
+            <ul className="mb-0 mt-2">
+              <li>請確認捐贈數量與批次效期正確</li>
+              <li>建議填寫捐贈者聯絡方式以利後續致謝</li>
+              <li>捐贈紀錄會計入捐贈者排行</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
