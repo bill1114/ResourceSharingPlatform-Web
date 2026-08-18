@@ -2,7 +2,7 @@
 // 捐贈沒有即期快選面板：捐進快過期的批次不是該優先做的事。
 // 寫入走 donation-create Edge Function；Index 只是一個受 RLS 限縮的 SELECT。
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
@@ -10,6 +10,7 @@ import { functionErrorMessage } from '../lib/functionError'
 import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
 import { StockBatchPicker } from '../components/StockBatchPicker'
+import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyLocation, SupplyDonationLog } from '../types/db'
 
 interface DonorSummaryRow {
@@ -24,6 +25,7 @@ interface DonorSummaryRow {
 export function SupplyDonationCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
+  const navigate = useNavigate()
 
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [locationId, setLocationId] = useState<number | null>(profile?.location_id ?? null)
@@ -90,12 +92,7 @@ export function SupplyDonationCreate() {
       setError(data?.message ?? (await functionErrorMessage(invokeError, '捐贈失敗')))
       return
     }
-    setSuccess(data.message)
-    setDonorName('')
-    setDonorContact('')
-    setQuantity('')
-    setRemark('')
-    picker.reload()
+    navigate('/donations', { state: { flash: data.message } })
   }
 
   return (
@@ -276,6 +273,7 @@ export function SupplyDonationIndex() {
       <h2 className="mb-4">
         <i className="bi bi-award" /> 捐贈紀錄
       </h2>
+      <FlashMessage />
 
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">

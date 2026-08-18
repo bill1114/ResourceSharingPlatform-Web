@@ -3,7 +3,7 @@
 // 已過期批次時會自動把原因設為「過期」。
 // 寫入走 disposal-create Edge Function；Index 只是一個受 RLS 限縮的 SELECT。
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
@@ -12,11 +12,13 @@ import { locationColorStyle } from '../lib/colors'
 import { Roles, AllDisposalReasons, disposalReasonDisplayName, disposalReasonBadgeClass, DisposalReasons } from '../lib/enums'
 import { ExpiringItemsPanel, StockBatchPicker } from '../components/StockBatchPicker'
 import { fetchExpiringItems, isExpired } from '../lib/stockBatch'
+import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation, SupplyDisposalLog } from '../types/db'
 
 export function SupplyDisposalCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
+  const navigate = useNavigate()
 
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [locationId, setLocationId] = useState<number | null>(profile?.location_id ?? null)
@@ -116,12 +118,7 @@ export function SupplyDisposalCreate() {
       setError(data?.message ?? (await functionErrorMessage(invokeError, '報廢失敗')))
       return
     }
-    setSuccess(data.message)
-    setQuantity('')
-    setRemark('')
-    setReason(DisposalReasons.Other)
-    picker.reload()
-    setExpiringItems(await fetchExpiringItems(expiryScope))
+    navigate('/disposals', { state: { flash: data.message } })
   }
 
   return (
@@ -290,6 +287,7 @@ export function SupplyDisposalIndex() {
       <h2 className="mb-4">
         <i className="bi bi-list-ul" /> 物資報廢紀錄
       </h2>
+      <FlashMessage />
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">
           <i className="bi bi-funnel" /> 篩選條件

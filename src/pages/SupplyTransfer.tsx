@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { locationColorStyle } from '../lib/colors'
 import { Roles, TransferStatuses, transferStatusBadgeClass, transferStatusDisplayName } from '../lib/enums'
 import { supabase } from '../lib/supabaseClient'
+import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation, SupplyTransferLog } from '../types/db'
 
 type TransferLine = { key: number; supplyItemId: number | null; transferQuantity: string }
@@ -11,6 +12,7 @@ type TransferLine = { key: number; supplyItemId: number | null; transferQuantity
 export function SupplyTransferCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
+  const navigate = useNavigate()
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
   const [fromLocationId, setFromLocationId] = useState<number | null>(profile?.location_id ?? null)
@@ -63,9 +65,7 @@ export function SupplyTransferCreate() {
       setError(data?.message ?? invokeError?.message ?? '建立轉移失敗')
       return
     }
-    setSuccess(data.message)
-    setLines([{ key: Date.now(), supplyItemId: null, transferQuantity: '' }])
-    setRemark('')
+    navigate('/transfers', { state: { flash: data.message } })
   }
 
   return (
@@ -170,6 +170,7 @@ export function SupplyTransferIndex() {
 
   return <div className="container-fluid mt-4">
     <div className="d-flex justify-content-between align-items-center mb-4"><h2><i className="bi bi-list-ul" /> 物資轉移紀錄</h2>{canCreate && <Link className="btn btn-primary" to="/transfers/create"><i className="bi bi-plus-circle" /> 新增轉移</Link>}</div>
+    <FlashMessage />
     {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
     <div className="card shadow-sm mb-3"><div className="card-header bg-light"><i className="bi bi-funnel" /> 篩選條件</div><div className="card-body"><div className="row g-3">
       <div className="col-md-4"><label className="form-label">關鍵字</label><input className="form-control" placeholder="搜尋物資名稱、操作人員或備註" value={keyword} onChange={(e) => setKeyword(e.target.value)} /></div>

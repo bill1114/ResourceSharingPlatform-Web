@@ -3,7 +3,7 @@
 // 寫入仍走 outbound-create Edge Function（數量異動需要真正的交易）；
 // Index 只是一個受 RLS 限縮的 SELECT。
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
@@ -12,12 +12,14 @@ import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
 import { ExpiringItemsPanel, StockBatchPicker } from '../components/StockBatchPicker'
 import { fetchExpiringItems } from '../lib/stockBatch'
+import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation, SupplyOutboundLog } from '../types/db'
 
 export function SupplyOutboundCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [locationId, setLocationId] = useState<number | null>(profile?.location_id ?? null)
@@ -124,13 +126,7 @@ export function SupplyOutboundCreate() {
       setError(data?.message ?? (await functionErrorMessage(invokeError, '出庫失敗')))
       return
     }
-    setSuccess(data.message)
-    setRecipientName('')
-    setRecipientContact('')
-    setQuantity('')
-    setRemark('')
-    picker.reload()
-    setExpiringItems(await fetchExpiringItems(expiryScope))
+    navigate('/outbound', { state: { flash: data.message } })
   }
 
   return (
@@ -308,6 +304,7 @@ export function SupplyOutboundIndex() {
       <h2 className="mb-4">
         <i className="bi bi-list-ul" /> 物資出庫紀錄
       </h2>
+      <FlashMessage />
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">
           <i className="bi bi-funnel" /> 篩選條件

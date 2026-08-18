@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth'
 import { deleteItemPhoto, itemPhotoUrl, itemPhotoDownloadUrl } from '../lib/imageUpload'
 import { Roles, AllStockTypes, stockTypeDisplayName, stockTypeBadgeClass } from '../lib/enums'
 import { locationColorStyle } from '../lib/colors'
+import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
 interface ItemSummaryRow {
@@ -168,6 +169,7 @@ export function SupplyItems() {
         </Link>
       </div>
 
+      <FlashMessage />
       {error && <div className="alert alert-danger">{error}</div>}
 
       {/* 分類快速切換 */}
