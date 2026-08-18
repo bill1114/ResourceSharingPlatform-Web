@@ -42,11 +42,6 @@ export function AppShell() {
                   </NavLink>
                 </li>
                 <li className="nav-item">
-                  <NavLink className="nav-link text-white" to="/map">
-                    <i className="bi bi-geo-alt" /> 據點地圖
-                  </NavLink>
-                </li>
-                <li className="nav-item">
                   <NavLink className="nav-link text-white" to="/supply-items">
                     <i className="bi bi-box" /> 物資管理
                   </NavLink>

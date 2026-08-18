@@ -7,7 +7,6 @@ import { SupplyLocations } from './pages/SupplyLocations'
 import { SupplyItems } from './pages/SupplyItems'
 import { InventoryTypes } from './pages/InventoryTypes'
 import { Dashboard } from './pages/Dashboard'
-import { SupplyMap } from './pages/SupplyMap'
 import { SupplyOutboundCreate, SupplyOutboundIndex } from './pages/SupplyOutbound'
 import { SupplyDonationCreate, SupplyDonationIndex } from './pages/SupplyDonation'
 import { SupplyDisposalCreate, SupplyDisposalIndex } from './pages/SupplyDisposal'
@@ -32,7 +31,6 @@ function App() {
         }
       >
         <Route path="/" element={<Dashboard />} />
-        <Route path="/map" element={<SupplyMap />} />
         <Route path="/supply-items" element={<SupplyItems />} />
         <Route path="/supply-locations" element={<SupplyLocations />} />
         <Route

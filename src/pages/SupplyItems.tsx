@@ -3,6 +3,7 @@
 // per migration plan §三. Uses useCascadingCatalog for the 種類/名稱/規格 dropdowns
 // and lib/imageUpload for the photo naming convention.
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useCascadingCatalog } from '../hooks/useCascadingCatalog'
@@ -17,6 +18,15 @@ type FormState = {
   expirationDate: string
   locationId: string
   remark: string
+}
+
+interface ItemSummaryRow {
+  itemName: string
+  locationCount: number
+  totalQuantity: number
+  unit: string
+  hasLowStock: boolean
+  nearestExpirationDate: string | null
 }
 
 const emptyForm: FormState = { id: null, quantity: '', expirationDate: '', locationId: '', remark: '' }
@@ -42,12 +52,20 @@ function itemStatus(item: SupplyItem): { label: string; badgeClass: string } {
 export function SupplyItems() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
+  const [searchParams] = useSearchParams()
   const [items, setItems] = useState<SupplyItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [safetyStocks, setSafetyStocks] = useState<LocationInventorySafetyStock[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // 篩選條件：關鍵字、據點、種類、庫存分類（分類快速切換 pills）
   const [keyword, setKeyword] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [stockTypeFilter, setStockTypeFilter] = useState('')
+  const [summaryOpen, setSummaryOpen] = useState(true)
+
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -55,6 +73,12 @@ export function SupplyItems() {
   const [stockType, setStockType] = useState<string>(StockTypes.HasExpiry)
 
   const catalog = useCascadingCatalog(stockType)
+
+  // 從戰情總覽「查看物資」帶入的據點篩選（?locationId=）
+  useEffect(() => {
+    const qLocationId = searchParams.get('locationId')
+    if (qLocationId) setLocationFilter(qLocationId)
+  }, [searchParams])
 
   async function load() {
     setLoading(true)
@@ -74,16 +98,71 @@ export function SupplyItems() {
     void load()
   }, [])
 
+  const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category))).sort(), [items])
+
   const filteredItems = useMemo(() => {
-    if (!keyword.trim()) return items
-    const k = keyword.trim().toLowerCase()
-    return items.filter(
-      (i) =>
-        i.item_name.toLowerCase().includes(k) ||
-        i.category.toLowerCase().includes(k) ||
-        (i.specification ?? '').toLowerCase().includes(k)
-    )
-  }, [items, keyword])
+    return items.filter((i) => {
+      if (locationFilter && i.location_id !== Number(locationFilter)) return false
+      if (categoryFilter && i.category !== categoryFilter) return false
+      if (stockTypeFilter && i.stock_type !== stockTypeFilter) return false
+      if (keyword.trim()) {
+        const k = keyword.trim().toLowerCase()
+        const matches =
+          i.item_name.toLowerCase().includes(k) ||
+          i.category.toLowerCase().includes(k) ||
+          (i.specification ?? '').toLowerCase().includes(k) ||
+          (i.remark ?? '').toLowerCase().includes(k)
+        if (!matches) return false
+      }
+      return true
+    })
+  }, [items, keyword, locationFilter, categoryFilter, stockTypeFilter])
+
+  // 依物資統計（跨據點加總）：對目前篩選結果依物資名稱分組
+  const itemSummary = useMemo<ItemSummaryRow[]>(() => {
+    const groups = new Map<
+      string,
+      { locationIds: Set<number>; totalQuantity: number; unit: string; hasLowStock: boolean; nearestExpirationDate: string | null }
+    >()
+    for (const item of filteredItems) {
+      let g = groups.get(item.item_name)
+      if (!g) {
+        g = { locationIds: new Set(), totalQuantity: 0, unit: item.unit ?? '', hasLowStock: false, nearestExpirationDate: null }
+        groups.set(item.item_name, g)
+      }
+      g.locationIds.add(item.location_id)
+      g.totalQuantity += item.quantity
+      if (itemStatus(item).label === '低庫存') g.hasLowStock = true
+      if (item.expiration_date && (!g.nearestExpirationDate || item.expiration_date < g.nearestExpirationDate)) {
+        g.nearestExpirationDate = item.expiration_date
+      }
+    }
+    return Array.from(groups.entries())
+      .map(([itemName, g]) => ({
+        itemName,
+        locationCount: g.locationIds.size,
+        totalQuantity: g.totalQuantity,
+        unit: g.unit,
+        hasLowStock: g.hasLowStock,
+        nearestExpirationDate: g.nearestExpirationDate,
+      }))
+      .sort((a, b) => {
+        if (a.nearestExpirationDate && b.nearestExpirationDate) {
+          if (a.nearestExpirationDate !== b.nearestExpirationDate) return a.nearestExpirationDate < b.nearestExpirationDate ? -1 : 1
+          return b.totalQuantity - a.totalQuantity
+        }
+        if (a.nearestExpirationDate) return -1
+        if (b.nearestExpirationDate) return 1
+        return b.totalQuantity - a.totalQuantity
+      })
+  }, [filteredItems])
+
+  function resetFilters() {
+    setKeyword('')
+    setLocationFilter('')
+    setCategoryFilter('')
+    setStockTypeFilter('')
+  }
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -194,16 +273,121 @@ export function SupplyItems() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
+      {/* 分類快速切換 */}
+      <div className="btn-group mb-3" role="group">
+        <button
+          type="button"
+          className={`btn btn-sm ${stockTypeFilter === '' ? 'btn-primary' : 'btn-outline-primary'}`}
+          onClick={() => setStockTypeFilter('')}
+        >
+          全部
+        </button>
+        {AllStockTypes.map((st) => (
+          <button
+            key={st}
+            type="button"
+            className={`btn btn-sm ${stockTypeFilter === st ? 'btn-primary' : 'btn-outline-primary'}`}
+            onClick={() => setStockTypeFilter(st)}
+          >
+            {stockTypeDisplayName(st)}
+          </button>
+        ))}
+      </div>
+
+      {/* 篩選條件 */}
       <div className="card shadow-sm mb-3">
+        <div className="card-header bg-light">
+          <i className="bi bi-funnel" /> 篩選條件
+        </div>
         <div className="card-body">
-          <input
-            className="form-control"
-            placeholder="搜尋物資種類、名稱或規格"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
+          <div className="row g-3">
+            <div className="col-md-3">
+              <label className="form-label">關鍵字</label>
+              <input
+                className="form-control"
+                placeholder="物資名稱、規格、種類、備註"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">據點</label>
+              <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                <option value="">全部據點</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.location_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">種類</label>
+              <select className="form-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                <option value="">全部種類</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3 d-flex align-items-end">
+              <button type="button" className="btn btn-secondary w-100" onClick={resetFilters}>
+                <i className="bi bi-arrow-clockwise" /> 重設
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* 依物資統計（跨據點加總） */}
+      {itemSummary.length > 0 && (
+        <div className="card shadow-sm mb-3">
+          <div
+            className="card-header bg-light d-flex justify-content-between align-items-center"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setSummaryOpen((v) => !v)}
+          >
+            <span>
+              <i className="bi bi-bar-chart" /> 依物資統計（跨據點加總，共 {itemSummary.length} 種品項）
+            </span>
+            <i className={`bi bi-chevron-${summaryOpen ? 'up' : 'down'}`} />
+          </div>
+          {summaryOpen && (
+            <div className="card-body">
+              <div className="table-responsive">
+                <table className="table table-sm table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>物資名稱</th>
+                      <th>分布據點數</th>
+                      <th>總數量</th>
+                      <th>最近效期</th>
+                      <th>提醒</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemSummary.map((s) => (
+                      <tr key={s.itemName}>
+                        <td>
+                          <strong>{s.itemName}</strong>
+                        </td>
+                        <td>{s.locationCount}</td>
+                        <td>
+                          {s.totalQuantity} {s.unit}
+                        </td>
+                        <td>{s.nearestExpirationDate ?? '-'}</td>
+                        <td>{s.hasLowStock && <span className="badge bg-danger">含低庫存</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card shadow-sm">
         <div className="card-body">
@@ -219,6 +403,7 @@ export function SupplyItems() {
                   <th>庫存分類</th>
                   <th>效期</th>
                   <th>據點</th>
+                  <th>安全庫存</th>
                   <th>狀態</th>
                   <th>操作</th>
                 </tr>
@@ -226,13 +411,13 @@ export function SupplyItems() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="text-center text-muted py-4">
+                    <td colSpan={11} className="text-center text-muted py-4">
                       載入中…
                     </td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="text-center text-muted py-4">
+                    <td colSpan={11} className="text-center text-muted py-4">
                       沒有符合條件的物資
                     </td>
                   </tr>
@@ -269,6 +454,9 @@ export function SupplyItems() {
                           </span>
                         </td>
                         <td>
+                          {item.safety_stock} {item.unit}
+                        </td>
+                        <td>
                           <span className={`badge ${status.badgeClass}`}>{status.label}</span>
                         </td>
                         <td className="text-nowrap">
@@ -284,6 +472,9 @@ export function SupplyItems() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="mt-3">
+            <p className="text-muted mb-0">共 {filteredItems.length} 筆物資</p>
           </div>
         </div>
       </div>
