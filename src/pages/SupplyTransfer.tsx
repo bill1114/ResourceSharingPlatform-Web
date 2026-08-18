@@ -128,6 +128,8 @@ export function SupplyTransferIndex() {
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
   const [keyword, setKeyword] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
   const [message, setMessage] = useState<{ type: 'success' | 'danger'; text: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -147,12 +149,16 @@ export function SupplyTransferIndex() {
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase()
-    if (!k) return logs
     return logs.filter((x) => {
-      const item = items.find((i) => i.id === x.supply_item_id)
-      return [item?.item_name, x.operator, x.remark].some((v) => (v ?? '').toLowerCase().includes(k))
+      if (statusFilter && x.status !== statusFilter) return false
+      if (locationFilter && x.from_location_id !== Number(locationFilter) && x.to_location_id !== Number(locationFilter)) return false
+      if (k) {
+        const item = items.find((i) => i.id === x.supply_item_id)
+        if (![item?.item_name, x.operator, x.remark].some((v) => (v ?? '').toLowerCase().includes(k))) return false
+      }
+      return true
     })
-  }, [logs, items, keyword])
+  }, [logs, items, keyword, statusFilter, locationFilter])
 
   async function resolve(functionName: 'transfer-confirm' | 'transfer-cancel', logId: number) {
     setMessage(null)
@@ -165,7 +171,18 @@ export function SupplyTransferIndex() {
   return <div className="container-fluid mt-4">
     <div className="d-flex justify-content-between align-items-center mb-4"><h2><i className="bi bi-list-ul" /> 物資轉移紀錄</h2>{canCreate && <Link className="btn btn-primary" to="/transfers/create"><i className="bi bi-plus-circle" /> 新增轉移</Link>}</div>
     {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
-    <div className="card shadow-sm mb-3"><div className="card-body"><input className="form-control" placeholder="搜尋物資名稱、操作人員或備註" value={keyword} onChange={(e) => setKeyword(e.target.value)} /></div></div>
+    <div className="card shadow-sm mb-3"><div className="card-header bg-light"><i className="bi bi-funnel" /> 篩選條件</div><div className="card-body"><div className="row g-3">
+      <div className="col-md-4"><label className="form-label">關鍵字</label><input className="form-control" placeholder="搜尋物資名稱、操作人員或備註" value={keyword} onChange={(e) => setKeyword(e.target.value)} /></div>
+      <div className="col-md-3"><label className="form-label">狀態</label><select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <option value="">全部狀態</option>
+        {Object.values(TransferStatuses).map((s) => <option key={s} value={s}>{transferStatusDisplayName(s)}</option>)}
+      </select></div>
+      <div className="col-md-3"><label className="form-label">據點（來源或目標）</label><select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+        <option value="">全部據點</option>
+        {locations.map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
+      </select></div>
+      <div className="col-md-2 d-flex align-items-end"><button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setStatusFilter(''); setLocationFilter('') }}><i className="bi bi-arrow-clockwise" /> 重設</button></div>
+    </div></div></div>
     <div className="card shadow-sm"><div className="card-body"><div className="table-responsive"><table className="table table-hover align-middle">
       <thead className="table-light"><tr><th>轉移時間</th><th>物資</th><th>來源</th><th /><th>目標</th><th>數量</th><th>狀態</th><th>操作人員</th><th>備註</th><th>動作</th></tr></thead>
       <tbody>{loading ? <tr><td colSpan={10} className="text-center py-4 text-muted">載入中…</td></tr> : filtered.length === 0 ? <tr><td colSpan={10} className="text-center py-4 text-muted">沒有符合條件的轉移紀錄</td></tr> : filtered.map((log) => {

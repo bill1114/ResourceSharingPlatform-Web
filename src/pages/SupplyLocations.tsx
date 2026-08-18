@@ -1,7 +1,7 @@
 // Port of SupplyLocationController + Views/SupplyLocation/{Index,Create,Edit}.cshtml.
 // Direct supabase-js CRUD gated by RLS (Admin write, everyone read) — no Edge Function
 // needed, per migration plan §三.
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { SupplyLocation } from '../types/db'
 import { useAuth } from '../hooks/useAuth'
@@ -36,6 +36,7 @@ export function SupplyLocations() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [keyword, setKeyword] = useState('')
 
   async function load() {
     setLoading(true)
@@ -55,6 +56,18 @@ export function SupplyLocations() {
   useEffect(() => {
     void load()
   }, [])
+
+  const filteredLocations = useMemo(() => {
+    if (!keyword.trim()) return locations
+    const k = keyword.trim().toLowerCase()
+    return locations.filter(
+      (l) =>
+        l.location_name.toLowerCase().includes(k) ||
+        (l.address ?? '').toLowerCase().includes(k) ||
+        (l.contact_person ?? '').toLowerCase().includes(k) ||
+        (l.phone ?? '').toLowerCase().includes(k)
+    )
+  }, [locations, keyword])
 
   function openCreate() {
     setForm(emptyForm)
@@ -130,6 +143,30 @@ export function SupplyLocations() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
+      <div className="card shadow-sm mb-3">
+        <div className="card-header bg-light">
+          <i className="bi bi-funnel" /> 篩選條件
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            <div className="col-md-9">
+              <label className="form-label">關鍵字</label>
+              <input
+                className="form-control"
+                placeholder="據點名稱、地址、聯絡人或電話"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </div>
+            <div className="col-md-3 d-flex align-items-end">
+              <button type="button" className="btn btn-secondary w-100" onClick={() => setKeyword('')}>
+                <i className="bi bi-arrow-clockwise" /> 重設
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="card shadow-sm">
         <div className="card-body">
           <div className="table-responsive">
@@ -151,14 +188,14 @@ export function SupplyLocations() {
                       載入中…
                     </td>
                   </tr>
-                ) : locations.length === 0 ? (
+                ) : filteredLocations.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center text-muted py-4">
-                      尚無據點資料
+                      沒有符合條件的據點
                     </td>
                   </tr>
                 ) : (
-                  locations.map((loc) => (
+                  filteredLocations.map((loc) => (
                     <tr key={loc.id}>
                       <td>
                         <strong>{loc.location_name}</strong>

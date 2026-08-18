@@ -16,7 +16,10 @@ export function RecipientAnalysis() {
       <div className="col-md-4"><div className="card shadow-sm"><div className="card-body"><div className="text-muted">領取總次數</div><div className="fs-2 fw-bold">{rows.reduce((a, x) => a + Number(x.pickup_count), 0)}</div></div></div></div>
       <div className="col-md-4"><div className="card shadow-sm"><div className="card-body"><div className="text-muted">平均領取次數</div><div className="fs-2 fw-bold">{rows.length ? (rows.reduce((a, x) => a + Number(x.pickup_count), 0) / rows.length).toFixed(1) : '0'}</div></div></div></div>
     </div>
-    <div className="card shadow-sm mb-3"><div className="card-body"><input className="form-control" placeholder="搜尋領用人或聯絡方式" value={keyword} onChange={(e) => setKeyword(e.target.value)} /></div></div>
+    <div className="card shadow-sm mb-3"><div className="card-header bg-light"><i className="bi bi-funnel" /> 篩選條件</div><div className="card-body"><div className="row g-3">
+      <div className="col-md-10"><label className="form-label">關鍵字</label><input className="form-control" placeholder="搜尋領用人或聯絡方式" value={keyword} onChange={(e) => setKeyword(e.target.value)} /></div>
+      <div className="col-md-2 d-flex align-items-end"><button type="button" className="btn btn-secondary w-100" onClick={() => setKeyword('')}><i className="bi bi-arrow-clockwise" /> 重設</button></div>
+    </div></div></div>
     <div className="card shadow-sm"><div className="table-responsive"><table className="table table-hover mb-0"><thead className="table-light"><tr><th>排名</th><th>領用人</th><th>聯絡方式</th><th>領取次數</th><th>不同物資</th><th>首次領取</th><th>最近領取</th></tr></thead><tbody>
       {loading ? <tr><td colSpan={7} className="text-center py-4">載入中…</td></tr> : filtered.map((x, i) => <tr key={`${x.recipient_name}-${x.recipient_contact}`}><td>{i + 1}</td><td><strong>{x.recipient_name}</strong></td><td>{x.recipient_contact}</td><td>{x.pickup_count}</td><td>{x.distinct_item_count}</td><td>{new Date(x.first_pickup_date).toLocaleDateString('zh-TW')}</td><td>{new Date(x.last_pickup_date).toLocaleDateString('zh-TW')}</td></tr>)}
     </tbody></table></div></div>

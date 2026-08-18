@@ -1,5 +1,5 @@
 // Port of SupplyDonationController + Views/SupplyDonation/{Create,Index}.cshtml.
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
@@ -180,6 +180,8 @@ export function SupplyDonationIndex() {
   const [logs, setLogs] = useState<SupplyDonationLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [donorSummary, setDonorSummary] = useState<DonorSummaryRow[]>([])
+  const [keyword, setKeyword] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -198,6 +200,21 @@ export function SupplyDonationIndex() {
     void load()
   }, [])
 
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (locationFilter && log.location_id !== Number(locationFilter)) return false
+      if (keyword.trim()) {
+        const k = keyword.trim().toLowerCase()
+        const matches =
+          log.donor_name.toLowerCase().includes(k) ||
+          (log.donor_contact ?? '').toLowerCase().includes(k) ||
+          (log.operator ?? '').toLowerCase().includes(k)
+        if (!matches) return false
+      }
+      return true
+    })
+  }, [logs, keyword, locationFilter])
+
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
   }
@@ -207,6 +224,48 @@ export function SupplyDonationIndex() {
       <h2 className="mb-4">
         <i className="bi bi-award" /> 捐贈紀錄
       </h2>
+
+      <div className="card shadow-sm mb-3">
+        <div className="card-header bg-light">
+          <i className="bi bi-funnel" /> 篩選條件
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            <div className="col-md-6">
+              <label className="form-label">關鍵字</label>
+              <input
+                className="form-control"
+                placeholder="搜尋捐贈者姓名、聯絡方式或操作人員"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">據點</label>
+              <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                <option value="">全部據點</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.location_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3 d-flex align-items-end">
+              <button
+                type="button"
+                className="btn btn-secondary w-100"
+                onClick={() => {
+                  setKeyword('')
+                  setLocationFilter('')
+                }}
+              >
+                <i className="bi bi-arrow-clockwise" /> 重設
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="row g-3">
         <div className="col-md-8">
@@ -231,14 +290,14 @@ export function SupplyDonationIndex() {
                           載入中…
                         </td>
                       </tr>
-                    ) : logs.length === 0 ? (
+                    ) : filteredLogs.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-center text-muted py-4">
-                          尚無捐贈紀錄
+                          沒有符合條件的捐贈紀錄
                         </td>
                       </tr>
                     ) : (
-                      logs.map((log) => (
+                      filteredLogs.map((log) => (
                         <tr key={log.id}>
                           <td>{new Date(log.donation_time).toLocaleString('zh-TW')}</td>
                           <td>

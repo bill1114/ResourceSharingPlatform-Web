@@ -35,6 +35,8 @@ export function InventoryTypes() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [keyword, setKeyword] = useState('')
+  const [stockTypeFilter, setStockTypeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive'>('')
 
   const [showDefForm, setShowDefForm] = useState(false)
   const [defForm, setDefForm] = useState<DefForm>(emptyDefForm)
@@ -67,10 +69,22 @@ export function InventoryTypes() {
   }, [])
 
   const filtered = useMemo(() => {
-    if (!keyword.trim()) return definitions
-    const k = keyword.trim().toLowerCase()
-    return definitions.filter((d) => d.category.toLowerCase().includes(k) || d.item_name.toLowerCase().includes(k))
-  }, [definitions, keyword])
+    return definitions.filter((d) => {
+      if (stockTypeFilter && d.stock_type !== stockTypeFilter) return false
+      if (statusFilter && (statusFilter === 'active' ? !d.is_active : d.is_active)) return false
+      if (keyword.trim()) {
+        const k = keyword.trim().toLowerCase()
+        if (!d.category.toLowerCase().includes(k) && !d.item_name.toLowerCase().includes(k)) return false
+      }
+      return true
+    })
+  }, [definitions, keyword, stockTypeFilter, statusFilter])
+
+  function resetFilters() {
+    setKeyword('')
+    setStockTypeFilter('')
+    setStatusFilter('')
+  }
 
   function activeVariantCount(defId: number): number {
     return variants.filter((v) => v.inventory_item_definition_id === defId && v.is_active).length
@@ -219,13 +233,49 @@ export function InventoryTypes() {
       {error && <div className="alert alert-danger">{error}</div>}
 
       <div className="card shadow-sm mb-3">
+        <div className="card-header bg-light">
+          <i className="bi bi-funnel" /> 篩選條件
+        </div>
         <div className="card-body">
-          <input
-            className="form-control"
-            placeholder="搜尋物資種類或名稱"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
+          <div className="row g-3">
+            <div className="col-md-5">
+              <label className="form-label">關鍵字</label>
+              <input
+                className="form-control"
+                placeholder="搜尋物資種類或名稱"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">庫存分類</label>
+              <select className="form-select" value={stockTypeFilter} onChange={(e) => setStockTypeFilter(e.target.value)}>
+                <option value="">全部分類</option>
+                {AllStockTypes.map((st) => (
+                  <option key={st} value={st}>
+                    {stockTypeDisplayName(st)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">狀態</label>
+              <select
+                className="form-select"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as '' | 'active' | 'inactive')}
+              >
+                <option value="">全部</option>
+                <option value="active">啟用</option>
+                <option value="inactive">停用</option>
+              </select>
+            </div>
+            <div className="col-md-1 d-flex align-items-end">
+              <button type="button" className="btn btn-secondary w-100" onClick={resetFilters} title="重設">
+                <i className="bi bi-arrow-clockwise" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

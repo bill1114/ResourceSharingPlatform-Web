@@ -1,5 +1,5 @@
 // Port of SupplyDisposalController + Views/SupplyDisposal/{Create,Index}.cshtml.
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
@@ -162,6 +162,9 @@ export function SupplyDisposalCreate() {
 export function SupplyDisposalIndex() {
   const [logs, setLogs] = useState<SupplyDisposalLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
+  const [keyword, setKeyword] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
+  const [reasonFilter, setReasonFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -178,6 +181,19 @@ export function SupplyDisposalIndex() {
     void load()
   }, [])
 
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (locationFilter && log.location_id !== Number(locationFilter)) return false
+      if (reasonFilter && log.reason !== reasonFilter) return false
+      if (keyword.trim()) {
+        const k = keyword.trim().toLowerCase()
+        const matches = (log.remark ?? '').toLowerCase().includes(k) || (log.operator ?? '').toLowerCase().includes(k)
+        if (!matches) return false
+      }
+      return true
+    })
+  }, [logs, keyword, locationFilter, reasonFilter])
+
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
   }
@@ -187,6 +203,54 @@ export function SupplyDisposalIndex() {
       <h2 className="mb-4">
         <i className="bi bi-list-ul" /> 物資報廢紀錄
       </h2>
+      <div className="card shadow-sm mb-3">
+        <div className="card-header bg-light">
+          <i className="bi bi-funnel" /> 篩選條件
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            <div className="col-md-4">
+              <label className="form-label">關鍵字</label>
+              <input className="form-control" placeholder="搜尋備註或操作人員" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">據點</label>
+              <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                <option value="">全部據點</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.location_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">原因</label>
+              <select className="form-select" value={reasonFilter} onChange={(e) => setReasonFilter(e.target.value)}>
+                <option value="">全部原因</option>
+                {AllDisposalReasons.map((r) => (
+                  <option key={r} value={r}>
+                    {disposalReasonDisplayName(r)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-2 d-flex align-items-end">
+              <button
+                type="button"
+                className="btn btn-secondary w-100"
+                onClick={() => {
+                  setKeyword('')
+                  setLocationFilter('')
+                  setReasonFilter('')
+                }}
+              >
+                <i className="bi bi-arrow-clockwise" /> 重設
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="card shadow-sm">
         <div className="card-body">
           <div className="table-responsive">
@@ -208,14 +272,14 @@ export function SupplyDisposalIndex() {
                       載入中…
                     </td>
                   </tr>
-                ) : logs.length === 0 ? (
+                ) : filteredLogs.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center text-muted py-4">
-                      尚無報廢紀錄
+                      沒有符合條件的報廢紀錄
                     </td>
                   </tr>
                 ) : (
-                  logs.map((log) => (
+                  filteredLogs.map((log) => (
                     <tr key={log.id}>
                       <td>{new Date(log.disposal_time).toLocaleString('zh-TW')}</td>
                       <td>

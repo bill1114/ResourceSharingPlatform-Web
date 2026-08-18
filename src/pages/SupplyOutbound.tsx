@@ -196,6 +196,7 @@ export function SupplyOutboundIndex() {
   const [logs, setLogs] = useState<SupplyOutboundLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [keyword, setKeyword] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -213,10 +214,15 @@ export function SupplyOutboundIndex() {
   }, [])
 
   const filtered = useMemo(() => {
-    if (!keyword.trim()) return logs
-    const k = keyword.trim().toLowerCase()
-    return logs.filter((l) => l.recipient_name.toLowerCase().includes(k) || (l.recipient_contact ?? '').toLowerCase().includes(k))
-  }, [logs, keyword])
+    return logs.filter((l) => {
+      if (locationFilter && l.location_id !== Number(locationFilter)) return false
+      if (keyword.trim()) {
+        const k = keyword.trim().toLowerCase()
+        if (!l.recipient_name.toLowerCase().includes(k) && !(l.recipient_contact ?? '').toLowerCase().includes(k)) return false
+      }
+      return true
+    })
+  }, [logs, keyword, locationFilter])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -228,8 +234,39 @@ export function SupplyOutboundIndex() {
         <i className="bi bi-list-ul" /> 物資出庫紀錄
       </h2>
       <div className="card shadow-sm mb-3">
+        <div className="card-header bg-light">
+          <i className="bi bi-funnel" /> 篩選條件
+        </div>
         <div className="card-body">
-          <input className="form-control" placeholder="搜尋領用人姓名或聯絡方式" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+          <div className="row g-3">
+            <div className="col-md-6">
+              <label className="form-label">關鍵字</label>
+              <input className="form-control" placeholder="搜尋領用人姓名或聯絡方式" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">據點</label>
+              <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                <option value="">全部據點</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.location_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3 d-flex align-items-end">
+              <button
+                type="button"
+                className="btn btn-secondary w-100"
+                onClick={() => {
+                  setKeyword('')
+                  setLocationFilter('')
+                }}
+              >
+                <i className="bi bi-arrow-clockwise" /> 重設
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div className="card shadow-sm">
