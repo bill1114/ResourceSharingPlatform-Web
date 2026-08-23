@@ -5,7 +5,7 @@ import { locationColorStyle } from '../lib/colors'
 import { Roles, TransferStatuses, transferStatusBadgeClass, transferStatusDisplayName } from '../lib/enums'
 import { supabase } from '../lib/supabaseClient'
 import { FlashMessage } from '../components/FlashMessage'
-import type { SupplyItem, SupplyLocation, SupplyTransferLog } from '../types/db'
+import type { SupplyItem, SupplyLocation, SupplyTransferLog, SupplyRequest } from '../types/db'
 
 type TransferLine = { key: number; supplyItemId: number | null; transferQuantity: string }
 
@@ -42,6 +42,36 @@ export function SupplyTransferCreate() {
     if (!target) return
     setFromLocationId(target.location_id)
     setLines([{ key: Date.now(), supplyItemId: target.id, transferQuantity: '' }])
+  }, [searchParams, items])
+
+  // 戰情總覽「待處理需求」的「轉移補貨」帶 ?requestId= 進來時：來源=需求指定的來源據點、
+  // 目標=需求據點，並在來源據點找符合品項的批次、帶入需求數量。
+  useEffect(() => {
+    const reqId = searchParams.get('requestId')
+    if (!reqId || items.length === 0) return
+    let cancelled = false
+    supabase
+      .from('supply_request')
+      .select('*')
+      .eq('id', Number(reqId))
+      .single()
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        const req = data as SupplyRequest
+        if (req.source_location_id) setFromLocationId(req.source_location_id)
+        setToLocationId(req.requesting_location_id)
+        const match = items.find(
+          (x) =>
+            x.location_id === req.source_location_id &&
+            x.category === req.category &&
+            x.item_name === req.item_name &&
+            (x.specification ?? '') === (req.specification ?? '')
+        )
+        setLines([{ key: Date.now(), supplyItemId: match ? match.id : null, transferQuantity: String(req.quantity) }])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [searchParams, items])
 
   const sourceItems = useMemo(() => items.filter((x) => x.location_id === fromLocationId), [items, fromLocationId])

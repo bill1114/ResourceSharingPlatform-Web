@@ -7,7 +7,8 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { statusColorMap, statusCardStyle, AllDashboardStatuses, type DashboardStatusKey } from '../lib/statusColors'
-import type { SupplyLocation } from '../types/db'
+import { FlashMessage } from '../components/FlashMessage'
+import type { SupplyLocation, SupplyRequest } from '../types/db'
 
 interface LowStockRow {
   location_id?: number
@@ -44,10 +45,6 @@ interface LocationSummary {
   lowStockCount: number
 }
 
-function daysBetween(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86400000)
-}
-
 export function Dashboard() {
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [locationLowStock, setLocationLowStock] = useState<LowStockRow[]>([])
@@ -55,15 +52,15 @@ export function Dashboard() {
   const [expiringSoon, setExpiringSoon] = useState<ExpiringRow[]>([])
   const [expiredCount, setExpiredCount] = useState(0)
   const [locationSummaries, setLocationSummaries] = useState<LocationSummary[]>([])
+  const [requests, setRequests] = useState<SupplyRequest[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function load() {
+  async function load() {
       setLoading(true)
       const todayStr = new Date().toISOString().slice(0, 10)
       const in30Str = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
 
-      const [locRes, resolvedRes, allItemsRes, locLowRes, globalLowRes, expiringRes, expiredRes] = await Promise.all([
+      const [locRes, resolvedRes, allItemsRes, locLowRes, globalLowRes, expiringRes, expiredRes, reqRes] = await Promise.all([
         supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
         supabase.from('supply_item_resolved').select('location_id, resolved_definition_id'),
         supabase.from('supply_item').select('location_id, quantity').eq('is_active', true),
@@ -81,6 +78,7 @@ export function Dashboard() {
           .select('id', { count: 'exact', head: true })
           .eq('is_active', true)
           .lt('expiration_date', todayStr),
+        supabase.from('supply_request').select('*').eq('status', 'Open').order('created_at', { ascending: false }),
       ])
 
       const locs = (locRes.data ?? []) as SupplyLocation[]
@@ -93,6 +91,7 @@ export function Dashboard() {
       setGlobalLowStock((globalLowRes.data ?? []) as LowStockRow[])
       setExpiringSoon((expiringRes.data ?? []) as ExpiringRow[])
       setExpiredCount(expiredRes.count ?? 0)
+      setRequests((reqRes.data ?? []) as SupplyRequest[])
 
       setLocationSummaries(
         locs.map((location) => ({
@@ -107,9 +106,16 @@ export function Dashboard() {
       )
 
       setLoading(false)
-    }
+  }
+
+  useEffect(() => {
     void load()
   }, [])
+
+  async function markRequest(id: number, status: 'Fulfilled' | 'Cancelled') {
+    await supabase.from('supply_request').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+    void load()
+  }
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -128,6 +134,7 @@ export function Dashboard() {
       <h2 className="mb-4">
         <i className="bi bi-speedometer2" /> 地方物資戰情總覽
       </h2>
+      <FlashMessage />
 
       {/* p.9 色塊改色：四種狀態統一配色（藍/紅/黃/鐵灰），共用 lib/statusColors */}
       <div className="row g-3 mb-4">
@@ -141,14 +148,16 @@ export function Dashboard() {
           }
           return (
             <div className="col-md-3" key={key}>
-              <div className="card shadow-sm border-0 h-100" style={statusCardStyle(key)}>
+              {/* p.2：色塊本身可點擊，跳到該狀態清單頁 */}
+              <Link to={`/status/${key}`} className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle(key)}>
                 <div className="card-body">
                   <h6>
                     <i className={`bi ${c.icon}`} /> {c.label}
                   </h6>
                   <h2 className="mb-0">{count[key]}</h2>
+                  <small style={{ opacity: 0.85 }}>點擊查看清單 →</small>
                 </div>
-              </div>
+              </Link>
             </div>
           )
         })}
@@ -208,147 +217,67 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="row">
-        <div className="col-md-6 mb-4">
-          <div className="card shadow-sm">
-            <div className="card-header bg-danger text-white">
-              <i className="bi bi-exclamation-triangle-fill" /> 低於警戒水位物資
-            </div>
-            <div className="card-body">
-              {locationLowStock.length === 0 ? (
-                <p className="text-muted mb-0">沒有低庫存物資</p>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table table-bordered table-hover table-sm">
-                    <thead>
-                      <tr>
-                        <th>據點</th>
-                        <th>物資</th>
-                        <th>目前數量</th>
-                        <th>安全庫存</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {locationLowStock.slice(0, 10).map((row, i) => (
-                        <tr key={i}>
-                          <td>
-                            <span className="badge" style={locationColorStyle(row.location_id!)}>
-                              {locationName(row.location_id!)}
-                            </span>
-                          </td>
-                          <td>
-                            <strong>
-                              {row.category}／{row.item_name}
-                            </strong>
-                          </td>
-                          <td className="text-danger">
-                            <strong>{row.total_quantity}</strong> {row.unit}
-                          </td>
-                          <td>
-                            {row.safety_stock} {row.unit}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="col-md-6 mb-4">
-          <div className="card shadow-sm">
-            <div className="card-header bg-danger text-white">
-              <i className="bi bi-globe" /> 全系統總量不足
-            </div>
-            <div className="card-body">
-              {globalLowStock.length === 0 ? (
-                <p className="text-muted mb-0">沒有總量不足的物資</p>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table table-bordered table-hover table-sm">
-                    <thead>
-                      <tr>
-                        <th>物資</th>
-                        <th>目前數量</th>
-                        <th>安全庫存</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {globalLowStock.slice(0, 10).map((row, i) => (
-                        <tr key={i}>
-                          <td>
-                            <strong>
-                              {row.category}／{row.item_name}
-                            </strong>
-                          </td>
-                          <td className="text-danger">
-                            <strong>{row.total_quantity}</strong> {row.unit}
-                          </td>
-                          <td>
-                            {row.global_safety_stock} {row.unit}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* p.5/6/7：待處理缺料需求（全體可見）；來源據點可一鍵「轉移補貨」 */}
       <div className="row">
         <div className="col-12 mb-4">
           <div className="card shadow-sm">
-            <div className="card-header bg-warning text-dark">
-              <i className="bi bi-clock-fill" /> 即將過期物資
+            <div className="card-header text-white" style={{ backgroundColor: statusColorMap.locationLowStock.bg }}>
+              <i className="bi bi-hand-index-thumb" /> 待處理需求（{requests.length}）
             </div>
             <div className="card-body">
-              {expiringSoon.length === 0 ? (
-                <p className="text-muted mb-0">沒有即將過期的物資</p>
+              {requests.length === 0 ? (
+                <p className="text-muted mb-0">目前沒有待處理的缺料需求</p>
               ) : (
                 <div className="table-responsive">
-                  <table className="table table-bordered table-hover table-sm">
-                    <thead>
+                  <table className="table table-hover align-middle mb-0">
+                    <thead className="table-light">
                       <tr>
-                        <th>據點</th>
-                        <th>物資</th>
-                        <th>規格</th>
-                        <th>數量</th>
-                        <th>有效期限</th>
-                        <th>剩餘天數</th>
-                        <th></th>
+                        <th className="col-min">提出時間</th>
+                        <th>品項</th>
+                        <th className="col-min">需求據點</th>
+                        <th className="col-min">來源據點</th>
+                        <th className="col-min">數量</th>
+                        <th className="col-min">提出人</th>
+                        <th className="col-min">操作</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {expiringSoon.slice(0, 10).map((item) => (
-                        <tr key={item.id}>
+                      {requests.map((r) => (
+                        <tr key={r.id}>
+                          <td className="col-min">{new Date(r.created_at).toLocaleString('zh-TW')}</td>
                           <td>
-                            <span className="badge" style={locationColorStyle(item.location_id)}>
-                              {locationName(item.location_id)}
+                            <strong>{r.item_name}</strong>
+                            {r.specification ? <span className="text-muted">／{r.specification}</span> : null}
+                            <span className="text-muted">（{r.category}）</span>
+                          </td>
+                          <td className="col-min">
+                            <span className="badge" style={locationColorStyle(r.requesting_location_id)}>
+                              {locationName(r.requesting_location_id)}
                             </span>
                           </td>
-                          <td>
-                            <strong>{item.item_name}</strong>
+                          <td className="col-min">
+                            {r.source_location_id ? (
+                              <span className="badge" style={locationColorStyle(r.source_location_id)}>
+                                {locationName(r.source_location_id)}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
                           </td>
-                          <td>{item.specification ?? '－'}</td>
-                          <td>
-                            {item.quantity} {item.unit}
-                          </td>
-                          <td className="text-warning">
-                            <strong>{item.expiration_date}</strong>
-                          </td>
-                          <td>{daysBetween(new Date(), new Date(item.expiration_date))} 天</td>
-                          <td>
-                            <Link
-                              to={`/outbound/create?supplyItemId=${item.id}&locationId=${item.location_id}`}
-                              className="btn btn-sm btn-outline-primary"
-                            >
-                              選擇出庫
-                            </Link>
+                          <td className="col-min">{r.quantity}</td>
+                          <td className="col-min">{r.requested_by}</td>
+                          <td className="col-min">
+                            <div className="d-flex gap-1">
+                              <Link className="btn btn-sm btn-primary" to={`/transfers/create?requestId=${r.id}`} title="從來源據點轉移補貨">
+                                <i className="bi bi-arrow-left-right" /> 轉移補貨
+                              </Link>
+                              <button className="btn btn-sm btn-outline-success" onClick={() => void markRequest(r.id, 'Fulfilled')}>
+                                完成
+                              </button>
+                              <button className="btn btn-sm btn-outline-secondary" onClick={() => void markRequest(r.id, 'Cancelled')}>
+                                取消
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -360,6 +289,7 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
     </div>
   )
 }

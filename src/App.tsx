@@ -8,6 +8,7 @@ import { SupplyItems } from './pages/SupplyItems'
 import { StockIn } from './pages/StockIn'
 import { InventoryTypes } from './pages/InventoryTypes'
 import { Dashboard } from './pages/Dashboard'
+import { StatusList } from './pages/StatusList'
 import { SupplyOutboundCreate, SupplyOutboundIndex } from './pages/SupplyOutbound'
 import { SupplyDonationCreate, SupplyDonationIndex } from './pages/SupplyDonation'
 import { SupplyDisposalCreate, SupplyDisposalIndex } from './pages/SupplyDisposal'
@@ -56,6 +57,7 @@ function App() {
         }
       >
         <Route path="/" element={<Dashboard />} />
+        <Route path="/status/:status" element={<StatusList />} />
         <Route path="/supply-items" element={<SupplyItems />} />
         <Route path="/stock-in" element={<StockIn />} />
         <Route path="/supply-locations" element={<SupplyLocations />} />

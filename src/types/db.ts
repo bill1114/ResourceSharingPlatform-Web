@@ -117,6 +117,22 @@ export interface AIStockInLog {
   created_at: string; confirmed_at: string | null
 }
 
+export interface SupplyRequest {
+  id: number
+  category: string
+  item_name: string
+  specification: string | null
+  requesting_location_id: number
+  source_location_id: number | null
+  quantity: number
+  status: string // Open / Fulfilled / Cancelled
+  requested_by: string | null
+  note: string | null
+  fulfilled_transfer_batch_id: string | null
+  created_at: string
+  updated_at: string | null
+}
+
 export interface SupplyItem {
   id: number
   category: string
