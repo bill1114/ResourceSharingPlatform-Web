@@ -133,10 +133,14 @@ export function StatusList() {
     return rows.filter((r) => `${r.category} ${r.item_name} ${r.specification ?? ''}`.toLowerCase().includes(k))
   }, [rows, keyword])
 
-  // 舉手時：需求方＝這列的據點（低庫存/即期/已過期），總量不足則用登入者的據點。
-  const requestingLocId: number | null = raiseRow ? (raiseRow.locationId ?? profile?.location_id ?? null) : null
+  // 需求方＝登入帳號的據點（固定，不隨品項變）。管理員無據點時才需手選。
+  const myLocId: number | null = profile?.location_id ?? null
+  // 來源＝物資所在的據點（這列的據點，自動帶入）；總量不足（無所在據點）才需挑選。
+  const isGlobalRow = raiseRow != null && raiseRow.locationId == null
+  // 物資就在自己據點時無需向自己求援。
+  const sameLocation = raiseRow != null && raiseRow.locationId != null && raiseRow.locationId === myLocId
 
-  // 來源選項：其他據點對此品項的現有庫存（數量 > 0），依數量多到少。
+  // 總量不足時：可挑「有此品項庫存」的其他據點（顯示現有數量）。
   const sourceOptions = useMemo(() => {
     if (!raiseRow) return [] as { locId: number; qty: number }[]
     const byLoc = new Map<number, number>()
@@ -146,13 +150,13 @@ export function StatusList() {
         it.item_name === raiseRow.item_name &&
         (it.specification ?? '') === (raiseRow.specification ?? '') &&
         it.quantity > 0 &&
-        it.location_id !== requestingLocId
+        it.location_id !== myLocId
       ) {
         byLoc.set(it.location_id, (byLoc.get(it.location_id) ?? 0) + it.quantity)
       }
     }
     return [...byLoc.entries()].map(([locId, qty]) => ({ locId, qty })).sort((a, b) => b.qty - a.qty)
-  }, [raiseRow, items, requestingLocId])
+  }, [raiseRow, items, myLocId])
 
   function openRaise(row: Row) {
     setRaiseRow(row)
@@ -167,10 +171,11 @@ export function StatusList() {
     e.preventDefault()
     if (!raiseRow) return
     setError(null)
-    const reqLoc = requestingLocId ?? (reqLocationId ? Number(reqLocationId) : null)
-    if (!reqLoc) return setError('無法判斷需求據點，請選擇你的據點')
-    if (!srcLocationId) return setError('請選擇要調貨的來源據點')
-    if (Number(srcLocationId) === reqLoc) return setError('來源據點不可與需求據點相同')
+    const reqLoc = myLocId ?? (reqLocationId ? Number(reqLocationId) : null)
+    const srcLoc = isGlobalRow ? (srcLocationId ? Number(srcLocationId) : null) : raiseRow.locationId
+    if (!reqLoc) return setError('無法判斷你的據點，請先選擇')
+    if (!srcLoc) return setError('請選擇來源據點')
+    if (reqLoc === srcLoc) return setError('此物資就在你的據點，無需向自己調貨')
     const qty = Number(reqQuantity)
     if (!Number.isInteger(qty) || qty <= 0) return setError('數量必須是大於 0 的整數')
 
@@ -180,7 +185,7 @@ export function StatusList() {
       item_name: raiseRow.item_name,
       specification: raiseRow.specification,
       requesting_location_id: reqLoc,
-      source_location_id: Number(srcLocationId),
+      source_location_id: srcLoc,
       quantity: qty,
       requested_by: profile?.display_name ?? profile?.username ?? null,
       note: reqNote.trim() || null,
@@ -229,18 +234,18 @@ export function StatusList() {
       <div className="card shadow-sm">
         <div className="card-body">
           <div className="table-responsive">
-            <table className="table table-hover align-middle">
+            <table className="table table-hover align-middle" style={{ width: 'auto' }}>
               <thead className="table-light">
                 <tr>
-                  <th className="col-min">流水號</th>
-                  <th className="col-min">照片</th>
-                  <th className="col-min">種類</th>
+                  <th>流水號</th>
+                  <th>照片</th>
+                  <th>種類</th>
                   <th>名稱</th>
-                  <th className="col-min">規格</th>
-                  <th className="col-min">數量</th>
-                  <th className="col-min">據點</th>
-                  <th className="col-min">效期／門檻</th>
-                  <th className="col-min">操作</th>
+                  <th>規格</th>
+                  <th>數量</th>
+                  <th>所在據點</th>
+                  <th>效期／門檻</th>
+                  <th className="text-end">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -332,8 +337,8 @@ export function StatusList() {
 
                   <div className="mb-3">
                     <label className="form-label">需求據點（你的據點）</label>
-                    {requestingLocId != null ? (
-                      <input className="form-control" disabled value={locationName(requestingLocId)} />
+                    {myLocId != null ? (
+                      <input className="form-control" disabled value={locationName(myLocId)} />
                     ) : (
                       <select className="form-select" required value={reqLocationId} onChange={(e) => setReqLocationId(e.target.value)}>
                         <option value="">請選擇你的據點</option>
@@ -347,17 +352,29 @@ export function StatusList() {
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label">要向哪個據點調貨（有庫存的據點）*</label>
-                    <select className="form-select" required value={srcLocationId} onChange={(e) => setSrcLocationId(e.target.value)}>
-                      <option value="">請選擇</option>
-                      {sourceOptions.map((s) => (
-                        <option key={s.locId} value={s.locId}>
-                          {locationName(s.locId)}（現有 {s.qty} {raiseRow.unit ?? ''}）
-                        </option>
-                      ))}
-                    </select>
-                    {sourceOptions.length === 0 && <div className="form-text text-danger">目前其他據點都沒有此品項的庫存。</div>}
+                    <label className="form-label">來源（物資所在）據點 *</label>
+                    {isGlobalRow ? (
+                      <>
+                        <select className="form-select" required value={srcLocationId} onChange={(e) => setSrcLocationId(e.target.value)}>
+                          <option value="">請選擇有庫存的據點</option>
+                          {sourceOptions.map((s) => (
+                            <option key={s.locId} value={s.locId}>
+                              {locationName(s.locId)}（現有 {s.qty} {raiseRow.unit ?? ''}）
+                            </option>
+                          ))}
+                        </select>
+                        {sourceOptions.length === 0 && <div className="form-text text-danger">目前其他據點都沒有此品項的庫存。</div>}
+                      </>
+                    ) : (
+                      <input
+                        className="form-control"
+                        disabled
+                        value={`${locationName(raiseRow.locationId)}（現有 ${raiseRow.quantity ?? '?'} ${raiseRow.unit ?? ''}）`}
+                      />
+                    )}
                   </div>
+
+                  {sameLocation && <div className="alert alert-warning py-2 small mb-3">此物資就在你的據點，無需向自己調貨。</div>}
 
                   <div className="mb-3">
                     <label className="form-label">需求數量 *</label>
@@ -372,7 +389,11 @@ export function StatusList() {
                   <button type="button" className="btn btn-secondary" onClick={() => setRaiseRow(null)}>
                     取消
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={saving || sourceOptions.length === 0}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={saving || sameLocation || (isGlobalRow && sourceOptions.length === 0)}
+                  >
                     {saving ? '送出中…' : '送出需求'}
                   </button>
                 </div>
