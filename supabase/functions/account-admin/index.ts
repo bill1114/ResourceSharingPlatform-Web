@@ -12,7 +12,10 @@ serve(async(req)=>{if(req.method==='OPTIONS')return new Response('ok',{headers:c
   const {data,error}=await admin.from('line_bindings').select('*');if(error)throw new E(error.message);return Response.json({success:true,bindings:data??[]},{headers:cors})
  }
  if(body.action==='createBindCode'){
-  if(!body.id)throw new E('缺少帳號識別碼');const code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,'0');const expiresAt=new Date(Date.now()+10*60*1000).toISOString();await admin.from('line_bind_codes').delete().eq('profile_id',body.id);const{error}=await admin.from('line_bind_codes').insert({code,profile_id:body.id,expires_at:expiresAt});if(error)throw new E(error.message);return Response.json({success:true,message:`綁定碼 ${code}，10 分鐘內請在 LINE 傳送「綁定 ${code}」`,code,expiresAt},{headers:cors})
+  // 綁定碼有效時間。改這個常數就好，前端的倒數是照回傳的 expiresAt 算的，不用同步改。
+  // 過期的實際把關在 line-webhook（.gt('expires_at', now)），不是只有畫面上倒數。
+  const BIND_CODE_TTL_MS=30*1000
+  if(!body.id)throw new E('缺少帳號識別碼');const code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,'0');const expiresAt=new Date(Date.now()+BIND_CODE_TTL_MS).toISOString();await admin.from('line_bind_codes').delete().eq('profile_id',body.id);const{error}=await admin.from('line_bind_codes').insert({code,profile_id:body.id,expires_at:expiresAt});if(error)throw new E(error.message);return Response.json({success:true,message:`綁定碼 ${code}，${Math.round(BIND_CODE_TTL_MS/1000)} 秒內請在 LINE 傳送「綁定 ${code}」`,code,expiresAt},{headers:cors})
  }
  if(body.action==='unbind'){
   const{error}=await admin.from('line_bindings').delete().eq('profile_id',body.id);if(error)throw new E(error.message);return Response.json({success:true,message:'已解除 LINE 綁定'},{headers:cors})

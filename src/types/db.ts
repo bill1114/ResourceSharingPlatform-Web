@@ -44,6 +44,7 @@ export interface InventoryItemVariant {
   id: number
   inventory_item_definition_id: number
   specification: string | null
+  global_safety_stock: number
   is_active: boolean
   created_at: string
   updated_at: string | null
@@ -68,6 +69,16 @@ export interface SupplyOutboundLog {
   operator: string | null
   outbound_time: string
   remark: string | null
+  // 批次出庫與領用人資料擴充；既有單筆紀錄可為 null。
+  batch_id: string | null
+  recipient_precinct: string | null
+  recipient_district: string | null
+  recipient_identity: string | null
+  // 取消出庫保留原紀錄，並標記取消資訊。
+  is_cancelled: boolean
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancel_reason: string | null
 }
 
 export interface SupplyDonationLog {
@@ -80,6 +91,23 @@ export interface SupplyDonationLog {
   operator: string | null
   donation_time: string
   remark: string | null
+}
+
+export interface SupplyStockInLog {
+  id: number
+  supply_item_id: number
+  location_id: number
+  stock_in_quantity: number
+  donor_name: string | null
+  donor_contact: string | null
+  donor_address: string | null
+  donor_precinct: string | null
+  donor_district: string | null
+  donor_identity: string | null
+  operator: string | null
+  remark: string | null
+  stock_in_time: string
+  updated_at: string | null
 }
 
 export interface SupplyDisposalLog {

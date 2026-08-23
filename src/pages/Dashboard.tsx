@@ -13,8 +13,10 @@ import type { SupplyLocation, SupplyRequest } from '../types/db'
 interface LowStockRow {
   location_id?: number
   inventory_item_definition_id: number
+  inventory_item_variant_id?: number
   category: string
   item_name: string
+  specification?: string | null
   unit: string
   safety_stock?: number
   global_safety_stock?: number
@@ -180,8 +182,6 @@ export function Dashboard() {
                     <thead className="table-light">
                       <tr>
                         <th>據點名稱</th>
-                        <th>物資種類數</th>
-                        <th>總數量</th>
                         <th>狀態</th>
                         <th>操作</th>
                       </tr>
@@ -191,10 +191,6 @@ export function Dashboard() {
                         <tr key={location.locationId}>
                           <td>
                             <i className="bi bi-building" /> {location.locationName}
-                          </td>
-                          <td>{location.itemTypeCount}</td>
-                          <td>
-                            <strong>{location.totalQuantity}</strong>
                           </td>
                           <td>
                             {/* p.10：狀態欄取代「低庫存項目」數字，有異常才顯示對應狀態，否則顯示正常。 */}

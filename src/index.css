@@ -43,3 +43,40 @@ body {
   width: 1%;
   white-space: nowrap;
 }
+
+/* 狀態清單維持物資清單同樣的橫向表格；欄寬依內容固定配置，
+   避免寬螢幕把名稱和數量之間拉成大片空白。 */
+.status-table {
+  width: 100%;
+  min-width: 940px;
+  table-layout: fixed;
+}
+
+.status-table th,
+.status-table td {
+  padding: 0.8rem 0.55rem;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.status-table th {
+  white-space: nowrap;
+}
+
+.status-table-serial { width: 6%; }
+.status-table-photo { width: 6%; }
+.status-table-category { width: 10%; }
+.status-table-name { width: 15%; }
+.status-table-spec { width: 9%; }
+.status-table-quantity { width: 9%; }
+.status-table-location { width: 14%; }
+.status-table-detail { width: 17%; }
+.status-table-action { width: 14%; }
+
+.status-table-image {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: cover;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.35rem;
+}

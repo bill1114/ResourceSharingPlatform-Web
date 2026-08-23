@@ -18,7 +18,7 @@ export interface StatusColor {
 
 export const statusColorMap: Record<DashboardStatusKey, StatusColor> = {
   locationLowStock: { label: '據點低庫存', bg: '#0d6efd', text: '#ffffff', icon: 'bi-exclamation-triangle-fill' }, // 藍
-  globalLowStock: { label: '總量不足', bg: '#dc3545', text: '#ffffff', icon: 'bi-globe' }, // 紅
+  globalLowStock: { label: '總量不足／啟動募資', bg: '#dc3545', text: '#ffffff', icon: 'bi-globe' }, // 紅
   expiringSoon: { label: '即將過期', bg: '#ffc107', text: '#212529', icon: 'bi-clock-fill' }, // 黃
   expired: { label: '已過期', bg: '#495057', text: '#ffffff', icon: 'bi-x-circle-fill' }, // 鐵灰
 }

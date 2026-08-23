@@ -13,7 +13,6 @@ type DefForm = {
   item_name: string
   unit: string
   stock_type: string
-  global_safety_stock: string
   is_active: boolean
 }
 
@@ -23,7 +22,6 @@ const emptyDefForm: DefForm = {
   item_name: '',
   unit: '',
   stock_type: AllStockTypes[1],
-  global_safety_stock: '0',
   is_active: true,
 }
 
@@ -44,6 +42,8 @@ export function InventoryTypes() {
 
   const [variantEditorFor, setVariantEditorFor] = useState<InventoryItemDefinition | null>(null)
   const [newSpec, setNewSpec] = useState('')
+  const [globalSafetyEditorFor, setGlobalSafetyEditorFor] = useState<InventoryItemDefinition | null>(null)
+  const [globalSafetyDraft, setGlobalSafetyDraft] = useState<Record<number, string>>({})
 
   const [safetyEditorFor, setSafetyEditorFor] = useState<InventoryItemDefinition | null>(null)
   const [safetyDraft, setSafetyDraft] = useState<Record<number, string>>({})
@@ -94,6 +94,10 @@ export function InventoryTypes() {
     return safetyStocks.filter((s) => s.inventory_item_definition_id === defId).length
   }
 
+  function globalSafetyConfiguredCount(defId: number): number {
+    return variants.filter((v) => v.inventory_item_definition_id === defId && v.is_active && v.global_safety_stock > 0).length
+  }
+
   function openCreate() {
     setDefForm(emptyDefForm)
     setShowDefForm(true)
@@ -106,7 +110,6 @@ export function InventoryTypes() {
       item_name: def.item_name,
       unit: def.unit,
       stock_type: def.stock_type,
-      global_safety_stock: def.global_safety_stock.toString(),
       is_active: def.is_active,
     })
     setShowDefForm(true)
@@ -122,7 +125,6 @@ export function InventoryTypes() {
       item_name: defForm.item_name.trim(),
       unit: defForm.unit.trim(),
       stock_type: defForm.stock_type,
-      global_safety_stock: Number(defForm.global_safety_stock) || 0,
       is_active: defForm.is_active,
       updated_at: new Date().toISOString(),
     }
@@ -158,6 +160,7 @@ export function InventoryTypes() {
     const { error } = await supabase.from('inventory_item_variant').insert({
       inventory_item_definition_id: variantEditorFor.id,
       specification: newSpec.trim() || null,
+      global_safety_stock: 0,
       is_active: true,
     })
     if (error) {
@@ -168,10 +171,70 @@ export function InventoryTypes() {
     void load()
   }
 
+  function openGlobalSafetyEditor(def: InventoryItemDefinition) {
+    const draft: Record<number, string> = {}
+    for (const variant of variants.filter((v) => v.inventory_item_definition_id === def.id && v.is_active)) {
+      draft[variant.id] = (variant.global_safety_stock ?? 0).toString()
+    }
+    setGlobalSafetyDraft(draft)
+    setGlobalSafetyEditorFor(def)
+  }
+
+  async function handleSaveGlobalSafety() {
+    if (!globalSafetyEditorFor) return
+    const targetVariants = variants.filter((v) => v.inventory_item_definition_id === globalSafetyEditorFor.id && v.is_active)
+    if (targetVariants.length === 0) {
+      setError('請先新增至少一個規格，才能設定總量安全庫存。')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    const updates = await Promise.all(
+      targetVariants.map((variant) =>
+        supabase
+          .from('inventory_item_variant')
+          .update({ global_safety_stock: Math.max(0, Number(globalSafetyDraft[variant.id] ?? 0) || 0), updated_at: new Date().toISOString() })
+          .eq('id', variant.id)
+      )
+    )
+    setSaving(false)
+    const failed = updates.find((result) => result.error)
+    if (failed?.error) {
+      setError(failed.error.message)
+      return
+    }
+    setGlobalSafetyEditorFor(null)
+    void load()
+  }
+
+  async function handleEnableDef(def: InventoryItemDefinition) {
+    const { error } = await supabase
+      .from('inventory_item_definition')
+      .update({ is_active: true, updated_at: new Date().toISOString() })
+      .eq('id', def.id)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    void load()
+  }
+
   async function handleDisableVariant(variant: InventoryItemVariant) {
     const { error } = await supabase
       .from('inventory_item_variant')
       .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', variant.id)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    void load()
+  }
+
+  async function handleEnableVariant(variant: InventoryItemVariant) {
+    const { error } = await supabase
+      .from('inventory_item_variant')
+      .update({ is_active: true, updated_at: new Date().toISOString() })
       .eq('id', variant.id)
     if (error) {
       setError(error.message)
@@ -223,7 +286,7 @@ export function InventoryTypes() {
           <h2>
             <i className="bi bi-card-list" /> 庫存種類設定
           </h2>
-          <p className="text-muted mb-0">安全庫存依物資種類與名稱合計，不區分規格。</p>
+          <p className="text-muted mb-0">據點門檻依物資種類與名稱合計；全系統安全總量則依規格分開設定與計算。</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate}>
           <i className="bi bi-plus-circle" /> 新增種類
@@ -323,9 +386,7 @@ export function InventoryTypes() {
                       </td>
                       <td>{def.unit}</td>
                       <td>{activeVariantCount(def.id)}</td>
-                      <td>
-                        {def.global_safety_stock} {def.unit}
-                      </td>
+                      <td>{globalSafetyConfiguredCount(def.id) > 0 ? `已設定 ${globalSafetyConfiguredCount(def.id)} 個規格` : '未設定'}</td>
                       <td>{safetyStockCount(def.id)} 筆</td>
                       <td>
                         <span className={`badge ${def.is_active ? 'bg-success' : 'bg-secondary'}`}>
@@ -339,12 +400,20 @@ export function InventoryTypes() {
                         <button className="btn btn-sm btn-outline-info me-1" onClick={() => setVariantEditorFor(def)}>
                           規格
                         </button>
+                        <button className="btn btn-sm btn-outline-warning me-1" onClick={() => openGlobalSafetyEditor(def)}>
+                          總量門檻
+                        </button>
                         <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => openSafetyEditor(def)}>
                           據點門檻
                         </button>
                         {def.is_active && (
                           <button className="btn btn-sm btn-outline-danger" onClick={() => void handleDisableDef(def)}>
                             停用
+                          </button>
+                        )}
+                        {!def.is_active && (
+                          <button className="btn btn-sm btn-outline-success" onClick={() => void handleEnableDef(def)}>
+                            啟用
                           </button>
                         )}
                       </td>
@@ -409,16 +478,6 @@ export function InventoryTypes() {
                       ))}
                     </select>
                   </div>
-                  <div className="mb-3">
-                    <label className="form-label">全系統安全庫存</label>
-                    <input
-                      className="form-control"
-                      type="number"
-                      min={0}
-                      value={defForm.global_safety_stock}
-                      onChange={(e) => setDefForm({ ...defForm, global_safety_stock: e.target.value })}
-                    />
-                  </div>
                   {defForm.id && (
                     <div className="form-check">
                       <input
@@ -440,6 +499,55 @@ export function InventoryTypes() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 全系統安全總量：每個規格獨立設定，所有據點同規格庫存加總後判斷。 */}
+      {globalSafetyEditorFor && (
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  全系統安全總量 — {globalSafetyEditorFor.category}｜{globalSafetyEditorFor.item_name}
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setGlobalSafetyEditorFor(null)} />
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-warning small">
+                  系統會加總所有據點的同一規格庫存；低於此固定門檻時，戰情總覽會列為「總量不足」，提醒啟動募資。設定為 0 表示不監控。
+                </div>
+                <table className="table align-middle mb-0">
+                  <thead><tr><th>規格</th><th>總量安全庫存（{globalSafetyEditorFor.unit}）</th></tr></thead>
+                  <tbody>
+                    {variants.filter((v) => v.inventory_item_definition_id === globalSafetyEditorFor.id && v.is_active).map((variant) => (
+                      <tr key={variant.id}>
+                        <td>{variant.specification ?? '無規格'}</td>
+                        <td>
+                          <input
+                            className="form-control"
+                            type="number"
+                            min={0}
+                            value={globalSafetyDraft[variant.id] ?? '0'}
+                            onChange={(e) => setGlobalSafetyDraft({ ...globalSafetyDraft, [variant.id]: e.target.value })}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                    {variants.filter((v) => v.inventory_item_definition_id === globalSafetyEditorFor.id && v.is_active).length === 0 && (
+                      <tr><td colSpan={2} className="text-muted text-center py-4">請先在「規格」中新增規格。</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setGlobalSafetyEditorFor(null)}>取消</button>
+                <button className="btn btn-primary" disabled={saving} onClick={() => void handleSaveGlobalSafety()}>
+                  {saving ? '儲存中…' : '儲存總量門檻'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -487,6 +595,11 @@ export function InventoryTypes() {
                             {v.is_active && (
                               <button className="btn btn-sm btn-outline-danger" onClick={() => void handleDisableVariant(v)}>
                                 停用
+                              </button>
+                            )}
+                            {!v.is_active && (
+                              <button className="btn btn-sm btn-outline-success" onClick={() => void handleEnableVariant(v)}>
+                                啟用
                               </button>
                             )}
                           </td>

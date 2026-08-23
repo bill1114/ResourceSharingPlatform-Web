@@ -229,12 +229,19 @@ export function SupplyTransferIndex() {
       <thead className="table-light"><tr><th>轉移時間</th><th>物資</th><th>來源</th><th /><th>目標</th><th>數量</th><th>狀態</th><th>操作人員</th><th>備註</th><th>動作</th></tr></thead>
       <tbody>{loading ? <tr><td colSpan={10} className="text-center py-4 text-muted">載入中…</td></tr> : filtered.length === 0 ? <tr><td colSpan={10} className="text-center py-4 text-muted">沒有符合條件的轉移紀錄</td></tr> : filtered.map((log) => {
         const item = items.find((x) => x.id === log.supply_item_id)
-        const canResolve = isAdmin || profile?.location_id === log.to_location_id
+        // 轉入單位確認送達；轉出單位取消。管理員可執行兩種動作。
+        // 後端 Edge Function 會再次驗證，這裡僅控制可見的操作按鈕。
+        const canConfirm = isAdmin || profile?.location_id === log.to_location_id
+        const canCancel = isAdmin || profile?.location_id === log.from_location_id
         return <tr key={log.id}>
           <td>{new Date(log.transfer_time).toLocaleString('zh-TW')}</td><td><strong>{item?.item_name ?? `物資 #${log.supply_item_id}`}</strong>{item?.specification && <div className="small text-muted">{item.specification}</div>}</td>
           <td><span className="badge" style={locationColorStyle(log.from_location_id)}>{locationName(log.from_location_id)}</span></td><td><i className="bi bi-arrow-right-circle text-primary" /></td><td><span className="badge" style={locationColorStyle(log.to_location_id)}>{locationName(log.to_location_id)}</span></td>
           <td><strong>{log.transfer_quantity}</strong> {item?.unit}</td><td><span className={`badge ${transferStatusBadgeClass(log.status)}`}>{transferStatusDisplayName(log.status)}</span>{log.confirmed_by && <div className="small text-muted">{log.confirmed_by}<br />{log.confirmed_at && new Date(log.confirmed_at).toLocaleString('zh-TW')}</div>}</td>
-          <td>{log.operator}</td><td>{log.remark}</td><td>{log.status === TransferStatuses.Pending && canResolve && <div className="d-flex gap-1"><button className="btn btn-success btn-sm" onClick={() => void resolve('transfer-confirm', log.id)}>確認送達</button><button className="btn btn-outline-danger btn-sm" onClick={() => void resolve('transfer-cancel', log.id)}>取消</button></div>}</td>
+          <td>{log.operator}</td><td>{log.remark}</td><td>{log.status === TransferStatuses.Pending && <div className="d-flex gap-1">
+            {canConfirm && <button className="btn btn-success btn-sm" onClick={() => void resolve('transfer-confirm', log.id)}>確認送達</button>}
+            {canCancel && <button className="btn btn-outline-danger btn-sm" onClick={() => void resolve('transfer-cancel', log.id)}>取消</button>}
+            {!canConfirm && !canCancel && <span className="small text-muted">僅轉出／轉入單位可操作</span>}
+          </div>}</td>
         </tr>
       })}</tbody>
     </table></div></div></div>

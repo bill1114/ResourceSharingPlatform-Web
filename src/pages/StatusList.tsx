@@ -31,6 +31,7 @@ interface Row {
 interface GlobalLowRow {
   category: string
   item_name: string
+  specification: string | null
   unit: string
   global_safety_stock: number
   total_quantity: number
@@ -67,7 +68,7 @@ export function StatusList() {
       const [itemsRes, locRes, globalRes, low] = await Promise.all([
         supabase.from('supply_item').select('*').eq('is_active', true).order('expiration_date', { ascending: true, nullsFirst: false }),
         supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
-        supabase.from('global_low_stock_view').select('category, item_name, unit, global_safety_stock, total_quantity'),
+        supabase.from('global_low_stock_view').select('category, item_name, specification, unit, global_safety_stock, total_quantity'),
         fetchLowStock(),
       ])
       setItems((itemsRes.data ?? []) as SupplyItem[])
@@ -91,18 +92,18 @@ export function StatusList() {
     if (!isValidStatus(status)) return []
     if (status === 'globalLowStock') {
       return globalLow.map((g) => ({
-        key: `g-${g.category}-${g.item_name}`,
+        key: `g-${g.category}-${g.item_name}-${g.specification ?? ''}`,
         id: null,
         image_path: null,
         category: g.category,
         item_name: g.item_name,
-        specification: null,
+        specification: g.specification,
         stock_type: null,
         unit: g.unit,
         locationId: null,
         quantity: g.total_quantity,
         expiration: null,
-        note: `安全門檻 ${g.global_safety_stock} ${g.unit}`,
+        note: `總量安全門檻 ${g.global_safety_stock} ${g.unit}（請啟動募資）`,
       }))
     }
     const picked = items.filter((it) => {
@@ -234,81 +235,35 @@ export function StatusList() {
       <div className="card shadow-sm">
         <div className="card-body">
           <div className="table-responsive">
-            <table className="table table-hover align-middle" style={{ width: 'auto' }}>
-              <thead className="table-light">
-                <tr>
-                  <th>流水號</th>
-                  <th>照片</th>
-                  <th>種類</th>
-                  <th>名稱</th>
-                  <th>規格</th>
-                  <th>數量</th>
-                  <th>所在據點</th>
-                  <th>效期／門檻</th>
-                  <th className="text-end">操作</th>
-                </tr>
-              </thead>
+            <table className="table table-hover align-middle mb-0 status-table">
+              <colgroup>
+                <col className="status-table-serial" /><col className="status-table-photo" /><col className="status-table-category" />
+                <col className="status-table-name" /><col className="status-table-spec" /><col className="status-table-quantity" />
+                <col className="status-table-location" /><col className="status-table-detail" /><col className="status-table-action" />
+              </colgroup>
+              <thead className="table-light"><tr>
+                <th>流水號</th><th>照片</th><th>種類</th><th>名稱</th><th>規格</th><th>數量</th><th>據點</th>
+                <th>{status === 'globalLowStock' ? '安全庫存' : '效期／庫存分類'}</th><th className="text-center">操作</th>
+              </tr></thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={9} className="text-center text-muted py-4">
-                      載入中…
-                    </td>
-                  </tr>
+                  <tr><td colSpan={9} className="text-center text-muted py-5">載入中…</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center text-muted py-4">
-                      目前沒有符合的項目
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((r) => {
-                    const url = itemPhotoUrl(r.image_path)
-                    return (
-                      <tr key={r.key}>
-                        <td className="col-min text-muted">{r.id ?? '—'}</td>
-                        <td className="col-min">
-                          {url ? (
-                            <img src={url} alt={r.item_name} style={{ width: 40, height: 40, objectFit: 'cover' }} className="rounded border" />
-                          ) : (
-                            <i className="bi bi-image text-muted fs-4" />
-                          )}
-                        </td>
-                        <td className="col-min">{r.category}</td>
-                        <td>
-                          <strong>{r.item_name}</strong>
-                        </td>
-                        <td className="col-min">{r.specification ?? '無'}</td>
-                        <td className="col-min">
-                          {r.quantity ?? '—'} {r.unit ?? ''}
-                        </td>
-                        <td className="col-min">
-                          {r.locationId == null ? (
-                            <span className="badge bg-secondary">全系統</span>
-                          ) : (
-                            <span className="badge" style={locationColorStyle(r.locationId)}>
-                              {locationName(r.locationId)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="col-min">
-                          {r.expiration ? (
-                            r.expiration
-                          ) : r.stock_type ? (
-                            <span className={`badge ${stockTypeBadgeClass(r.stock_type)}`}>{stockTypeDisplayName(r.stock_type)}</span>
-                          ) : (
-                            r.note ?? '—'
-                          )}
-                        </td>
-                        <td className="col-min">
-                          <button className="btn btn-sm btn-primary" onClick={() => openRaise(r)}>
-                            <i className="bi bi-hand-index-thumb" /> 舉手
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
+                  <tr><td colSpan={9} className="text-center text-muted py-5">目前沒有符合的項目</td></tr>
+                ) : filtered.map((r) => {
+                  const url = itemPhotoUrl(r.image_path)
+                  return (
+                    <tr key={r.key}>
+                      <td className="text-muted">{r.id ?? '—'}</td>
+                      <td>{url ? <img src={url} alt={r.item_name} className="status-table-image" /> : <i className="bi bi-image text-muted fs-4" />}</td>
+                      <td>{r.category}</td><td className="fw-semibold">{r.item_name}</td><td>{r.specification ?? '無'}</td>
+                      <td>{r.quantity ?? '—'} {r.unit ?? ''}</td>
+                      <td>{r.locationId == null ? <span className="badge bg-secondary">全系統</span> : <span className="badge" style={locationColorStyle(r.locationId)}>{locationName(r.locationId)}</span>}</td>
+                      <td>{r.expiration ?? (r.stock_type ? <span className={`badge ${stockTypeBadgeClass(r.stock_type)}`}>{stockTypeDisplayName(r.stock_type)}</span> : r.note ?? '—')}</td>
+                      <td className="text-center"><button className="btn btn-sm btn-primary" onClick={() => openRaise(r)}><i className="bi bi-hand-index-thumb" /> 舉手</button></td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

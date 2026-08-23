@@ -56,14 +56,31 @@ function assertLocationAccess(ctx: { profile: CallerProfile; isAdmin: boolean },
   if (ctx.profile.location_id !== locationId) throw new AuthError('您沒有權限在此據點執行此操作', 403)
 }
 
-interface Body {
+// 兩種呼叫方式並存：
+//   批次（Web 的物資出庫頁）  → 帶 items[]，走 outbound_create_batch()
+//   單筆（手機版領用、LINE Bot）→ 帶 supplyItemId/outboundQuantity，走原本的 outbound_create()
+// 保留單筆路徑是為了不動 MobileFeatures.tsx 與 line-webhook 那兩條切片。
+interface BatchEntry {
   supplyItemId: number
+  quantity: number
+}
+
+interface Body {
   locationId: number
-  outboundQuantity: number
   recipientName: string
   recipientContact?: string
   remark?: string
+  // 批次專用
+  items?: BatchEntry[]
+  recipientPrecinct?: string
+  recipientDistrict?: string
+  recipientIdentity?: string
+  // 單筆專用
+  supplyItemId?: number
+  outboundQuantity?: number
 }
+
+const VALID_IDENTITIES = ['LowIncome', 'MidLowIncome', 'General', 'Other']
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -79,16 +96,54 @@ serve(async (req) => {
     assertLocationAccess(ctx, body.locationId)
 
     const operatorName = ctx.profile.display_name ?? ctx.profile.username
+    const isBatch = Array.isArray(body.items)
 
-    const { data, error } = await ctx.adminClient.rpc('outbound_create', {
-      p_supply_item_id: body.supplyItemId,
-      p_location_id: body.locationId,
-      p_outbound_quantity: body.outboundQuantity,
-      p_recipient_name: body.recipientName.trim(),
-      p_recipient_contact: body.recipientContact?.trim() || null,
-      p_operator: operatorName,
-      p_remark: body.remark?.trim() || null,
-    })
+    let data: unknown
+    let error: { message: string } | null
+
+    if (isBatch) {
+      const items = body.items ?? []
+      if (items.length === 0) {
+        throw new AuthError('請至少加入一項要出庫的物資', 400)
+      }
+      for (const it of items) {
+        if (!it?.supplyItemId || !Number.isInteger(it.quantity) || it.quantity <= 0) {
+          throw new AuthError('出庫清單中有一列的物資或數量不正確', 400)
+        }
+      }
+      if (!body.recipientDistrict?.trim()) {
+        throw new AuthError('請選擇領用人所屬鄉鎮', 400)
+      }
+      if (!body.recipientIdentity || !VALID_IDENTITIES.includes(body.recipientIdentity)) {
+        throw new AuthError('請選擇領用人身分別', 400)
+      }
+
+      const res = await ctx.adminClient.rpc('outbound_create_batch', {
+        p_location_id: body.locationId,
+        p_items: items.map((it) => ({ supplyItemId: it.supplyItemId, quantity: it.quantity })),
+        p_recipient_name: body.recipientName.trim(),
+        p_recipient_contact: body.recipientContact?.trim() || null,
+        p_recipient_precinct: body.recipientPrecinct?.trim() || null,
+        p_recipient_district: body.recipientDistrict.trim(),
+        p_recipient_identity: body.recipientIdentity,
+        p_operator: operatorName,
+        p_remark: body.remark?.trim() || null,
+      })
+      data = res.data
+      error = res.error
+    } else {
+      const res = await ctx.adminClient.rpc('outbound_create', {
+        p_supply_item_id: body.supplyItemId,
+        p_location_id: body.locationId,
+        p_outbound_quantity: body.outboundQuantity,
+        p_recipient_name: body.recipientName.trim(),
+        p_recipient_contact: body.recipientContact?.trim() || null,
+        p_operator: operatorName,
+        p_remark: body.remark?.trim() || null,
+      })
+      data = res.data
+      error = res.error
+    }
 
     if (error) {
       throw new AuthError(error.message, 400)
@@ -98,7 +153,9 @@ serve(async (req) => {
       .invoke('line-notify', { body: { triggeredBy: 'outbound' } })
       .catch((e: unknown) => console.error('line-notify failed', e))
 
-    return new Response(JSON.stringify({ success: true, message: '出庫完成', log: data }), {
+    const message = isBatch ? `出庫完成，共 ${body.items?.length ?? 0} 項物資` : '出庫完成'
+
+    return new Response(JSON.stringify({ success: true, message, log: data }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (e) {

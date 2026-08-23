@@ -12,6 +12,14 @@ export function AccountManagement() {
   const [bindings, setBindings] = useState<LineBinding[]>([])
   const [form, setForm] = useState<Form>(emptyForm), [keyword, setKeyword] = useState(''), [roleFilter, setRoleFilter] = useState<Role|''>(''), [locationFilter, setLocationFilter] = useState(''), [statusFilter, setStatusFilter] = useState<''|'active'|'inactive'>(''), [message, setMessage] = useState<{ok:boolean;text:string}|null>(null), [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  // 綁定碼只有 30 秒，不倒數的話管理員根本不知道還剩多久。issuedAt 記下來是為了
+  // 算進度條的比例 —— 直接用回傳的 expiresAt 推，Edge Function 之後改秒數也不用動這裡。
+  const [bindCode, setBindCode] = useState<{code:string;expiresAt:string;issuedAt:number;username:string}|null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => { if(!bindCode) return; const t = setInterval(() => setNowMs(Date.now()), 250); return () => clearInterval(t) }, [bindCode])
+  const bindExpiresMs = bindCode ? new Date(bindCode.expiresAt).getTime() : 0
+  const bindSecondsLeft = bindCode ? Math.max(0, Math.ceil((bindExpiresMs - nowMs) / 1000)) : 0
+  const bindPercent = bindCode ? Math.max(0, Math.min(100, ((bindExpiresMs - nowMs) / (bindExpiresMs - bindCode.issuedAt)) * 100)) : 0
   async function load() { const [p, l, b] = await Promise.all([supabase.from('profiles').select('*').order('username'), supabase.from('supply_location').select('*').eq('is_active', true).order('id'), supabase.functions.invoke('account-admin',{body:{action:'bindings'}})]); setProfiles((p.data ?? []) as Profile[]); setLocations((l.data ?? []) as SupplyLocation[]); setBindings((b.data?.bindings ?? []) as LineBinding[]) }
   useEffect(() => { void load() }, [])
   const filtered = useMemo(() => profiles.filter((x) =>
@@ -25,9 +33,25 @@ export function AccountManagement() {
   function openCreate() { setForm(emptyForm); setShowForm(true) }
   function edit(x: Profile) { setForm({ id:x.id, username:x.username, displayName:x.display_name ?? '', password:'', roleName:x.role_name, locationId:x.location_id, isActive:x.is_active }); setShowForm(true) }
   async function deactivate(x: Profile) { if(!confirm(`確定停用帳號「${x.username}」嗎？停用後該帳號將無法登入。`))return; setSaving(true); setMessage(null); const{data,error}=await supabase.functions.invoke('account-admin',{body:{action:'update',id:x.id,username:x.username,displayName:x.display_name??'',password:'',roleName:x.role_name,locationId:x.location_id,isActive:false}}); setSaving(false); setMessage({ok:!!data?.success,text:data?.message??error?.message??'停用失敗'}); if(data?.success)await load() }
-  async function lineAction(action:'createBindCode'|'unbind',id:string){setSaving(true);const{data,error}=await supabase.functions.invoke('account-admin',{body:{action,id}});setSaving(false);setMessage({ok:!!data?.success,text:data?.message??error?.message??'LINE 綁定操作失敗'});if(data?.success)await load()}
+  async function lineAction(action:'createBindCode'|'unbind',id:string){setSaving(true);const{data,error}=await supabase.functions.invoke('account-admin',{body:{action,id}});setSaving(false)
+    // 產生綁定碼成功時不重複顯示一般訊息 —— 底下有專屬的倒數卡片，訊息會變成兩份。
+    if(action==='createBindCode'&&data?.success&&data.code){setMessage(null);setBindCode({code:data.code,expiresAt:data.expiresAt,issuedAt:Date.now(),username:profiles.find(p=>p.id===id)?.username??''});setNowMs(Date.now());return}
+    setBindCode(null);setMessage({ok:!!data?.success,text:data?.message??error?.message??'LINE 綁定操作失敗'});if(data?.success)await load()}
   return <div className="container-fluid mt-4"><div className="d-flex justify-content-between align-items-center"><h2><i className="bi bi-people" /> 帳號管理</h2><button className="btn btn-primary" onClick={openCreate}><i className="bi bi-person-plus" /> 新增帳號</button></div><hr />
     {message && <div className={`alert alert-${message.ok?'success':'danger'}`}>{message.text}</div>}
+    {bindCode && <div className={`alert ${bindSecondsLeft>0?'alert-warning':'alert-secondary'} d-flex align-items-center gap-3 flex-wrap`}>
+      <div className="text-center">
+        <div className="small text-muted">LINE 綁定碼{bindCode.username && `（${bindCode.username}）`}</div>
+        <div className="fs-1 fw-bold font-monospace" style={{letterSpacing:'0.2em'}}>{bindCode.code}</div>
+      </div>
+      <div className="flex-grow-1" style={{minWidth:240}}>
+        {bindSecondsLeft>0 ? <>
+          請在 <strong className="fs-4">{bindSecondsLeft}</strong> 秒內於 LINE 傳送「<strong>綁定 {bindCode.code}</strong>」
+          <div className="progress mt-2" style={{height:8}}><div className={`progress-bar ${bindSecondsLeft<=10?'bg-danger':'bg-warning'}`} style={{width:`${bindPercent}%`}} /></div>
+        </> : <span className="text-danger fw-bold"><i className="bi bi-x-circle" /> 綁定碼已過期，請重新產生。</span>}
+      </div>
+      <button type="button" className="btn-close" aria-label="關閉" onClick={()=>setBindCode(null)} />
+    </div>}
     {showForm && <div className="modal d-block" tabIndex={-1} style={{backgroundColor:'rgba(0,0,0,0.5)'}}><div className="modal-dialog modal-lg"><div className="modal-content"><form onSubmit={submit}>
       <div className="modal-header"><h5 className="modal-title">{form.id ? '編輯帳號' : '新增帳號'}</h5><button type="button" className="btn-close" onClick={()=>setShowForm(false)}/></div>
       <div className="modal-body"><div className="row g-3">

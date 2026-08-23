@@ -18,7 +18,9 @@ serve(async (req) => {
     const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
     const { data: log } = await admin.from('supply_transfer_log').select('to_location_id,status').eq('id', logId).single()
     if (!log) throw new AppError('找不到轉移紀錄', 404)
-    if (profile.role_name !== 'Admin' && profile.location_id !== log.to_location_id) throw new AppError('僅目標據點人員或管理員可確認送達')
+    // 確認送達綁「轉入單位」：只有實際收到貨的人才知道貨到了。
+    // （成對的 transfer-cancel 則綁「轉出單位」，兩支合起來就是一邊一個動作。）
+    if (profile.role_name !== 'Admin' && profile.location_id !== log.to_location_id) throw new AppError('僅轉入單位人員或管理員可確認送達')
     const confirmedBy = profile.display_name ?? profile.username
     const { data, error } = await admin.rpc('transfer_confirm', { p_log_id: logId, p_confirmed_by: confirmedBy })
     if (error) throw new AppError(error.message, 400)

@@ -7,11 +7,12 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useCascadingCatalog } from '../hooks/useCascadingCatalog'
 import { uploadItemPhoto } from '../lib/imageUpload'
-import { StockTypes, AllStockTypes, stockTypeDisplayName } from '../lib/enums'
+import { StockTypes, AllStockTypes, stockTypeDisplayName, Roles } from '../lib/enums'
+import { useAuth } from '../hooks/useAuth'
 import type { SupplyLocation, LocationInventorySafetyStock } from '../types/db'
 
-type FormState = { quantity: string; expirationDate: string; locationId: string; remark: string; donorName: string; donorContact: string }
-const emptyForm: FormState = { quantity: '', expirationDate: '', locationId: '', remark: '', donorName: '', donorContact: '' }
+type FormState = { quantity: string; expirationDate: string; locationId: string; remark: string; donorName: string; donorContact: string; donorAddress: string }
+const emptyForm: FormState = { quantity: '', expirationDate: '', locationId: '', remark: '', donorName: '', donorContact: '', donorAddress: '' }
 
 export function SupplyItemForm({
   onSaved,
@@ -22,6 +23,7 @@ export function SupplyItemForm({
   onCancel?: () => void
   submitLabel?: string
 }) {
+  const { profile } = useAuth()
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [safetyStocks, setSafetyStocks] = useState<LocationInventorySafetyStock[]>([])
   const [form, setForm] = useState<FormState>(emptyForm)
@@ -41,6 +43,13 @@ export function SupplyItemForm({
       setSafetyStocks((safetyRes.data ?? []) as LocationInventorySafetyStock[])
     })
   }, [])
+
+  useEffect(() => {
+    // 所有帳號（包含管理員）先帶入個人所屬據點；管理員僅是保留切換權限。
+    if (profile?.location_id) {
+      setForm((current) => ({ ...current, locationId: String(profile.location_id) }))
+    }
+  }, [profile])
 
   function resolvedSafetyStock(): number {
     if (!catalog.currentDefinition || !form.locationId) return 0
@@ -93,9 +102,8 @@ export function SupplyItemForm({
       imagePath = path
     }
 
-    // p.15：入庫可附捐贈人資料。有填捐贈人時，先建立數量 0 的批次，再走既有
-    // donation-create Edge Function 把數量補上並寫入捐贈紀錄（讓捐贈分析看得到），
-    // 重用已測試過的後端、不需新增 Function；沒填則照原本直接以實際數量入庫。
+    // 每次入庫先建立正式庫存，再留一筆可後補的來源紀錄；捐贈資料可先空白，
+    // 後續於「物資捐贈」補登時只能更新來源資料，不能再次增加庫存。
     const donorName = form.donorName.trim()
     const donorContact = form.donorContact.trim()
     const asDonation = donorName.length > 0
@@ -107,7 +115,7 @@ export function SupplyItemForm({
       specification: catalog.currentVariant?.specification ?? null,
       unit: catalog.currentDefinition.unit,
       stock_type: stockType,
-      quantity: asDonation ? 0 : fullQuantity,
+      quantity: fullQuantity,
       expiration_date: stockType === StockTypes.NoExpiry ? null : form.expirationDate,
       location_id: Number(form.locationId),
       inventory_item_variant_id: catalog.variantId,
@@ -123,33 +131,42 @@ export function SupplyItemForm({
       return
     }
 
-    if (asDonation) {
-      const { data, error: invokeError } = await supabase.functions.invoke('donation-create', {
-        body: {
-          supplyItemId: result.data.id,
-          locationId: Number(form.locationId),
-          donationQuantity: fullQuantity,
-          donorName,
-          donorContact,
-          remark: form.remark.trim() || null,
-        },
-      })
-      if (invokeError || !data?.success) {
-        setSaving(false)
-        setError(data?.message ?? '入庫已建立，但捐贈人紀錄寫入失敗，請至物資捐贈補登')
-        return
-      }
+    const { error: stockInLogError } = await supabase.from('supply_stock_in_log').insert({
+      supply_item_id: result.data.id,
+      location_id: Number(form.locationId),
+      stock_in_quantity: fullQuantity,
+      donor_name: donorName || null,
+      donor_contact: donorContact || null,
+      donor_address: form.donorAddress.trim() || null,
+      operator: profile?.display_name ?? profile?.username ?? null,
+      remark: form.remark.trim() || null,
+    })
+    if (stockInLogError) {
+      setSaving(false)
+      setError(`入庫已建立，但入庫來源紀錄寫入失敗：${stockInLogError.message}`)
+      return
     }
 
     setSaving(false)
     const name = catalog.currentDefinition.item_name
     resetForm()
-    onSaved?.(asDonation ? `「${name}」已入庫並記錄捐贈人` : `「${name}」已入庫`)
+    onSaved?.(asDonation ? `「${name}」已入庫並記錄捐贈人` : `「${name}」已入庫，可稍後補登捐贈人資料`)
   }
 
   return (
     <form onSubmit={handleSubmit}>
       {error && <div className="alert alert-danger">{error}</div>}
+
+      <div className="card shadow-sm mb-4"><div className="card-header bg-light"><i className="bi bi-geo-alt" /> 步驟一：所在據點</div><div className="card-body">
+        <label className="form-label">據點 *</label>
+        <select className="form-select" required disabled={profile?.role_name !== Roles.Admin} value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
+          <option value="">請選擇據點</option>
+          {locations.map((l) => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+        </select>
+        {profile?.role_name !== Roles.Admin && <div className="form-text">已預設為你的所屬據點；僅管理員可切換。</div>}
+      </div></div>
+
+      <div className="card shadow-sm mb-4"><div className="card-header bg-light"><i className="bi bi-box-seam" /> 步驟二：物資資訊</div><div className="card-body">
 
       <div className="mb-3">
         <label className="form-label d-block">分類</label>
@@ -233,17 +250,6 @@ export function SupplyItemForm({
           <label className="form-label">單位</label>
           <input className="form-control" disabled value={catalog.currentDefinition?.unit ?? ''} />
         </div>
-        <div className="col-md-4 mb-3">
-          <label className="form-label">所在據點 *</label>
-          <select className="form-select" required value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
-            <option value="">請選擇據點</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.location_name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {stockType !== StockTypes.NoExpiry && (
@@ -269,8 +275,9 @@ export function SupplyItemForm({
         />
         <div className="form-text">支援 jpg、png、webp，大小 5MB 以內</div>
       </div>
+      </div></div>
 
-      {/* p.15：捐贈人資料（選填）。填了捐贈人姓名，本次入庫會一併記入捐贈紀錄／捐贈分析。 */}
+      <div className="card shadow-sm mb-4"><div className="card-header bg-light"><i className="bi bi-person-heart" /> 步驟三：捐贈人資訊 <span className="text-muted small">（可稍後補登）</span></div><div className="card-body">
       <div className="row">
         <div className="col-md-6 mb-3">
           <label className="form-label">捐贈人姓名</label>
@@ -283,20 +290,22 @@ export function SupplyItemForm({
           <div className="form-text">填寫後，本次入庫會記入捐贈紀錄與捐贈分析。</div>
         </div>
         <div className="col-md-6 mb-3">
-          <label className="form-label">捐贈者聯絡方式</label>
+          <label className="form-label">捐贈者電話</label>
           <input
             className="form-control"
-            placeholder="例如：手機或地址（選填）"
+            placeholder="例如：0912-345-678（選填）"
             value={form.donorContact}
             onChange={(e) => setForm({ ...form, donorContact: e.target.value })}
           />
         </div>
+        <div className="col-md-12 mb-3"><label className="form-label">捐贈者地址</label><input className="form-control" placeholder="例如：雲林縣斗六市…（選填）" value={form.donorAddress} onChange={(e) => setForm({ ...form, donorAddress: e.target.value })} /></div>
       </div>
 
       <div className="mb-3">
         <label className="form-label">備註</label>
         <textarea className="form-control" rows={2} value={form.remark} onChange={(e) => setForm({ ...form, remark: e.target.value })} />
       </div>
+      </div></div>
 
       <div className="d-flex justify-content-end gap-2">
         {onCancel && (
