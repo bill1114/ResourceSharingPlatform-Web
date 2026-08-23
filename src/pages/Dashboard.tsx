@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
+import { statusColorMap, statusCardStyle, AllDashboardStatuses, type DashboardStatusKey } from '../lib/statusColors'
 import type { SupplyLocation } from '../types/db'
 
 interface LowStockRow {
@@ -128,47 +129,29 @@ export function Dashboard() {
         <i className="bi bi-speedometer2" /> 地方物資戰情總覽
       </h2>
 
+      {/* p.9 色塊改色：四種狀態統一配色（藍/紅/黃/鐵灰），共用 lib/statusColors */}
       <div className="row g-3 mb-4">
-        <div className="col-md-3">
-          <div className="card shadow-sm border-danger">
-            <div className="card-body text-danger">
-              <h6>
-                <i className="bi bi-exclamation-triangle-fill" /> 據點低庫存
-              </h6>
-              <h2 className="mb-0">{locationLowStock.length}</h2>
+        {AllDashboardStatuses.map((key) => {
+          const c = statusColorMap[key]
+          const count: Record<DashboardStatusKey, number> = {
+            locationLowStock: locationLowStock.length,
+            globalLowStock: globalLowStock.length,
+            expiringSoon: expiringSoon.length,
+            expired: expiredCount,
+          }
+          return (
+            <div className="col-md-3" key={key}>
+              <div className="card shadow-sm border-0 h-100" style={statusCardStyle(key)}>
+                <div className="card-body">
+                  <h6>
+                    <i className={`bi ${c.icon}`} /> {c.label}
+                  </h6>
+                  <h2 className="mb-0">{count[key]}</h2>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card shadow-sm border-danger">
-            <div className="card-body text-danger">
-              <h6>
-                <i className="bi bi-globe" /> 總量不足
-              </h6>
-              <h2 className="mb-0">{globalLowStock.length}</h2>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card shadow-sm border-warning">
-            <div className="card-body text-warning">
-              <h6>
-                <i className="bi bi-clock-fill" /> 即將過期
-              </h6>
-              <h2 className="mb-0">{expiringSoon.length}</h2>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card shadow-sm border-dark">
-            <div className="card-body text-dark">
-              <h6>
-                <i className="bi bi-x-circle-fill" /> 已過期
-              </h6>
-              <h2 className="mb-0">{expiredCount}</h2>
-            </div>
-          </div>
-        </div>
+          )
+        })}
       </div>
 
       <div className="row mb-4">

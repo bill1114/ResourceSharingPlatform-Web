@@ -11,6 +11,7 @@ import { Roles, StockTypes, AllStockTypes, stockTypeDisplayName, stockTypeBadgeC
 import { locationColorStyle } from '../lib/colors'
 import { FlashMessage } from '../components/FlashMessage'
 import { exportToExcel } from '../lib/excelExport'
+import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
 interface ItemSummaryRow {
@@ -28,8 +29,9 @@ function today(): Date {
   return d
 }
 
-function itemStatus(item: SupplyItem): { label: string; badgeClass: string } {
-  if (item.quantity <= item.safety_stock) return { label: '低庫存', badgeClass: 'bg-danger' }
+function itemStatus(item: SupplyItem, low: LowStockData): { label: string; badgeClass: string } {
+  // 低庫存改用統一來源判斷（見 lib/lowStock.ts），不再用逐列 quantity<=safety_stock。
+  if (isItemLowStock(item, low)) return { label: '低庫存', badgeClass: 'bg-danger' }
   if (item.expiration_date) {
     const exp = new Date(item.expiration_date)
     if (exp < today()) return { label: '已過期', badgeClass: 'bg-dark' }
@@ -47,6 +49,7 @@ export function SupplyItems() {
   const [searchParams] = useSearchParams()
   const [items, setItems] = useState<SupplyItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
+  const [lowStock, setLowStock] = useState<LowStockData>(emptyLowStock)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -123,13 +126,15 @@ export function SupplyItems() {
 
   async function load() {
     setLoading(true)
-    const [itemsRes, locRes] = await Promise.all([
+    const [itemsRes, locRes, low] = await Promise.all([
       supabase.from('supply_item').select('*').eq('is_active', true).order('id', { ascending: false }),
       supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
+      fetchLowStock(),
     ])
     if (itemsRes.error) setError(itemsRes.error.message)
     setItems((itemsRes.data ?? []) as SupplyItem[])
     setLocations((locRes.data ?? []) as SupplyLocation[])
+    setLowStock(low)
     setLoading(false)
   }
 
@@ -171,7 +176,7 @@ export function SupplyItems() {
       }
       g.locationIds.add(item.location_id)
       g.totalQuantity += item.quantity
-      if (itemStatus(item).label === '低庫存') g.hasLowStock = true
+      if (itemStatus(item, lowStock).label === '低庫存') g.hasLowStock = true
       if (item.expiration_date && (!g.nearestExpirationDate || item.expiration_date < g.nearestExpirationDate)) {
         g.nearestExpirationDate = item.expiration_date
       }
@@ -194,7 +199,7 @@ export function SupplyItems() {
         if (b.nearestExpirationDate) return 1
         return b.totalQuantity - a.totalQuantity
       })
-  }, [filteredItems])
+  }, [filteredItems, lowStock])
 
   function resetFilters() {
     setKeyword('')
@@ -218,7 +223,7 @@ export function SupplyItems() {
       { header: '有效期限', value: (i) => i.expiration_date ?? '' },
       { header: '據點', value: (i) => locationName(i.location_id) },
       { header: '安全庫存', value: (i) => i.safety_stock },
-      { header: '狀態', value: (i) => itemStatus(i).label },
+      { header: '狀態', value: (i) => itemStatus(i, lowStock).label },
       { header: '備註', value: (i) => i.remark ?? '' },
     ], filteredItems)
   }
@@ -403,7 +408,7 @@ export function SupplyItems() {
                   </tr>
                 ) : (
                   filteredItems.map((item) => {
-                    const status = itemStatus(item)
+                    const status = itemStatus(item, lowStock)
                     const url = itemPhotoUrl(item.image_path)
                     return (
                       <tr key={item.id}>
@@ -542,7 +547,7 @@ export function SupplyItems() {
                   </dd>
                   <dt className="col-4">狀態</dt>
                   <dd className="col-8">
-                    <span className={`badge ${itemStatus(detailsItem).badgeClass}`}>{itemStatus(detailsItem).label}</span>
+                    <span className={`badge ${itemStatus(detailsItem, lowStock).badgeClass}`}>{itemStatus(detailsItem, lowStock).label}</span>
                   </dd>
                   <dt className="col-4">備註</dt>
                   <dd className="col-8">{detailsItem.remark ?? '—'}</dd>
