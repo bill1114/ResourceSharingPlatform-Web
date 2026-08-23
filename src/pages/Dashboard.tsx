@@ -43,6 +43,7 @@ interface LocationSummary {
   itemTypeCount: number
   totalQuantity: number
   lowStockCount: number
+  expiringSoonCount: number
 }
 
 export function Dashboard() {
@@ -102,6 +103,7 @@ export function Dashboard() {
           ).size,
           totalQuantity: allItems.filter((i) => i.location_id === location.id).reduce((sum, i) => sum + i.quantity, 0),
           lowStockCount: locLow.filter((r) => r.location_id === location.id).length,
+          expiringSoonCount: (expiringRes.data ?? []).filter((r) => (r as ExpiringRow).location_id === location.id).length,
         }))
       )
 
@@ -180,7 +182,7 @@ export function Dashboard() {
                         <th>據點名稱</th>
                         <th>物資種類數</th>
                         <th>總數量</th>
-                        <th>低庫存項目</th>
+                        <th>狀態</th>
                         <th>操作</th>
                       </tr>
                     </thead>
@@ -195,10 +197,22 @@ export function Dashboard() {
                             <strong>{location.totalQuantity}</strong>
                           </td>
                           <td>
-                            {location.lowStockCount > 0 ? (
-                              <span className="badge bg-danger">{location.lowStockCount}</span>
-                            ) : (
+                            {/* p.10：狀態欄取代「低庫存項目」數字，有異常才顯示對應狀態，否則顯示正常。 */}
+                            {location.lowStockCount === 0 && location.expiringSoonCount === 0 ? (
                               <span className="badge bg-success">正常</span>
+                            ) : (
+                              <div className="d-flex flex-wrap gap-1">
+                                {location.lowStockCount > 0 && (
+                                  <span className="badge" style={{ backgroundColor: statusColorMap.locationLowStock.bg, color: statusColorMap.locationLowStock.text }}>
+                                    低庫存 {location.lowStockCount}
+                                  </span>
+                                )}
+                                {location.expiringSoonCount > 0 && (
+                                  <span className="badge" style={{ backgroundColor: statusColorMap.expiringSoon.bg, color: statusColorMap.expiringSoon.text }}>
+                                    即將過期 {location.expiringSoonCount}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td>

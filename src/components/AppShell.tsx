@@ -47,12 +47,6 @@ export function AppShell() {
                   </a>
                   <ul className="dropdown-menu">
                     <li>
-                      <NavLink className="dropdown-item" to="/supply-items">
-                        <i className="bi bi-boxes" /> 物資清單
-                      </NavLink>
-                    </li>
-                    <li><hr className="dropdown-divider" /></li>
-                    <li>
                       <NavLink className="dropdown-item" to="/stock-in">
                         <i className="bi bi-box-arrow-in-down" /> 物資入庫
                       </NavLink>
@@ -122,6 +116,11 @@ export function AppShell() {
                         <i className="bi bi-graph-up" /> 領取分析
                       </NavLink>
                     </li>
+                    <li>
+                      <NavLink className="dropdown-item" to="/donations/donor-analysis">
+                        <i className="bi bi-heart" /> 捐贈分析
+                      </NavLink>
+                    </li>
                   </ul>
                 </li>
                 {engineeringMode && (
@@ -137,6 +136,18 @@ export function AppShell() {
                       <i className="bi bi-gear" /> 系統管理
                     </a>
                     <ul className="dropdown-menu">
+                      {/* p.11：物資清單移入系統管理；p.16：物資明細（調整/報廢 + 異動歷程）。 */}
+                      <li>
+                        <NavLink className="dropdown-item" to="/supply-items">
+                          <i className="bi bi-boxes" /> 物資清單
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink className="dropdown-item" to="/item-ledger">
+                          <i className="bi bi-clock-history" /> 物資明細
+                        </NavLink>
+                      </li>
+                      <li><hr className="dropdown-divider" /></li>
                       <li>
                         <NavLink className="dropdown-item" to="/admin/accounts">
                           <i className="bi bi-people" /> 帳號管理

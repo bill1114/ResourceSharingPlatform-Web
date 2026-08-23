@@ -10,8 +10,8 @@ import { uploadItemPhoto } from '../lib/imageUpload'
 import { StockTypes, AllStockTypes, stockTypeDisplayName } from '../lib/enums'
 import type { SupplyLocation, LocationInventorySafetyStock } from '../types/db'
 
-type FormState = { quantity: string; expirationDate: string; locationId: string; remark: string }
-const emptyForm: FormState = { quantity: '', expirationDate: '', locationId: '', remark: '' }
+type FormState = { quantity: string; expirationDate: string; locationId: string; remark: string; donorName: string; donorContact: string }
+const emptyForm: FormState = { quantity: '', expirationDate: '', locationId: '', remark: '', donorName: '', donorContact: '' }
 
 export function SupplyItemForm({
   onSaved,
@@ -93,13 +93,21 @@ export function SupplyItemForm({
       imagePath = path
     }
 
+    // p.15：入庫可附捐贈人資料。有填捐贈人時，先建立數量 0 的批次，再走既有
+    // donation-create Edge Function 把數量補上並寫入捐贈紀錄（讓捐贈分析看得到），
+    // 重用已測試過的後端、不需新增 Function；沒填則照原本直接以實際數量入庫。
+    const donorName = form.donorName.trim()
+    const donorContact = form.donorContact.trim()
+    const asDonation = donorName.length > 0
+    const fullQuantity = Number(form.quantity)
+
     const payload = {
       category: catalog.currentDefinition.category,
       item_name: catalog.currentDefinition.item_name,
       specification: catalog.currentVariant?.specification ?? null,
       unit: catalog.currentDefinition.unit,
       stock_type: stockType,
-      quantity: Number(form.quantity),
+      quantity: asDonation ? 0 : fullQuantity,
       expiration_date: stockType === StockTypes.NoExpiry ? null : form.expirationDate,
       location_id: Number(form.locationId),
       inventory_item_variant_id: catalog.variantId,
@@ -108,15 +116,35 @@ export function SupplyItemForm({
       ...(imagePath ? { image_path: imagePath } : {}),
     }
 
-    const result = await supabase.from('supply_item').insert(payload)
-    setSaving(false)
+    const result = await supabase.from('supply_item').insert(payload).select('id').single()
     if (result.error) {
+      setSaving(false)
       setError(result.error.message)
       return
     }
+
+    if (asDonation) {
+      const { data, error: invokeError } = await supabase.functions.invoke('donation-create', {
+        body: {
+          supplyItemId: result.data.id,
+          locationId: Number(form.locationId),
+          donationQuantity: fullQuantity,
+          donorName,
+          donorContact,
+          remark: form.remark.trim() || null,
+        },
+      })
+      if (invokeError || !data?.success) {
+        setSaving(false)
+        setError(data?.message ?? '入庫已建立，但捐贈人紀錄寫入失敗，請至物資捐贈補登')
+        return
+      }
+    }
+
+    setSaving(false)
     const name = catalog.currentDefinition.item_name
     resetForm()
-    onSaved?.(`「${name}」已入庫`)
+    onSaved?.(asDonation ? `「${name}」已入庫並記錄捐贈人` : `「${name}」已入庫`)
   }
 
   return (
@@ -240,6 +268,29 @@ export function SupplyItemForm({
           onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
         />
         <div className="form-text">支援 jpg、png、webp，大小 5MB 以內</div>
+      </div>
+
+      {/* p.15：捐贈人資料（選填）。填了捐贈人姓名，本次入庫會一併記入捐贈紀錄／捐贈分析。 */}
+      <div className="row">
+        <div className="col-md-6 mb-3">
+          <label className="form-label">捐贈人姓名</label>
+          <input
+            className="form-control"
+            placeholder="例如：陳先生／某某企業（選填）"
+            value={form.donorName}
+            onChange={(e) => setForm({ ...form, donorName: e.target.value })}
+          />
+          <div className="form-text">填寫後，本次入庫會記入捐贈紀錄與捐贈分析。</div>
+        </div>
+        <div className="col-md-6 mb-3">
+          <label className="form-label">捐贈者聯絡方式</label>
+          <input
+            className="form-control"
+            placeholder="例如：手機或地址（選填）"
+            value={form.donorContact}
+            onChange={(e) => setForm({ ...form, donorContact: e.target.value })}
+          />
+        </div>
       </div>
 
       <div className="mb-3">

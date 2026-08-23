@@ -14,6 +14,8 @@ import { SupplyDonationCreate, SupplyDonationIndex } from './pages/SupplyDonatio
 import { SupplyDisposalCreate, SupplyDisposalIndex } from './pages/SupplyDisposal'
 import { SupplyTransferCreate, SupplyTransferIndex } from './pages/SupplyTransfer'
 import { RecipientAnalysis } from './pages/RecipientAnalysis'
+import { DonorAnalysis } from './pages/DonorAnalysis'
+import { ItemLedger } from './pages/ItemLedger'
 import { AccountManagement } from './pages/AccountManagement'
 import { LineSettings, AISettings } from './pages/AdminSettings'
 import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
@@ -73,10 +75,19 @@ function App() {
         <Route path="/outbound/create" element={<SupplyOutboundCreate />} />
         <Route path="/outbound" element={<SupplyOutboundIndex />} />
         <Route path="/outbound/recipient-analysis" element={<RecipientAnalysis />} />
+        <Route path="/donations/donor-analysis" element={<DonorAnalysis />} />
         <Route path="/donations/create" element={<SupplyDonationCreate />} />
         <Route path="/donations" element={<SupplyDonationIndex />} />
         <Route path="/disposals/create" element={<SupplyDisposalCreate />} />
         <Route path="/disposals" element={<SupplyDisposalIndex />} />
+        <Route
+          path="/item-ledger"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <ItemLedger />
+            </RoleGate>
+          }
+        />
         <Route path="/ai-stockin/create" element={<AIStockInCreate />} />
         <Route path="/ai-stockin" element={<AIStockInIndex />} />
         <Route path="/engineering/mobile-features" element={<EngineeringRoute><MobileFeatures /></EngineeringRoute>} />
