@@ -1,23 +1,46 @@
-// 分工單 p.16（只有總管）：物資明細。
-// 把每一筆物資（supply_item 批次）的異動歷程整合成一條時間軸：
-// 第一筆一定是「入庫」（該批 supply_item 建立），後續依時間串接 捐贈／出庫／報廢／轉移。
-// 目前「調整」沒有獨立紀錄表（物資清單的編輯是就地改數量、未留痕），故先不含調整項，
-// 待之後補上 adjustment log 再併入。此頁為唯讀報表，出庫等實際動作仍在各自功能頁進行。
-import { useEffect, useMemo, useState } from 'react'
+// 物資明細（總管專用）—「一列一筆異動」的完整明細表。
+// 每筆物資從入庫開始，後續的 捐贈／出庫／報廢／轉移／調整 都各自攤成一列，
+// 顯示 類型／增減數量／說明。可用 關鍵字、據點、類型 篩選；匯出全部（右上角）。
+// 操作：
+//   調整 = 盤點修正該批次目前數量（走 stock_adjust RPC，留一筆「調整」）。
+//   刪除 = 只對「調整」列開放，回算庫存（走 stock_adjust_delete RPC）。
+// 出庫／報廢／轉移不在這裡刪，請走各自的回庫／取消流程。
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { exportToExcel } from '../lib/excelExport'
-import type { SupplyItem, SupplyLocation } from '../types/db'
+import { FlashMessage } from '../components/FlashMessage'
+import type { SupplyLocation } from '../types/db'
 
-type LedgerType = '入庫' | '捐贈' | '出庫' | '報廢' | '轉移'
+interface LedgerItem {
+  id: number
+  category: string
+  item_name: string
+  specification: string | null
+  unit: string | null
+  quantity: number
+  location_id: number
+  created_at: string
+  remark: string | null
+}
+
+type LedgerType = '入庫' | '捐贈' | '出庫' | '報廢' | '轉移' | '調整'
 
 interface LedgerEntry {
+  key: string
+  itemId: number
+  category: string
+  itemName: string
+  specification: string | null
+  unit: string | null
+  currentQty: number
+  locationId: number
   time: string
   type: LedgerType
-  delta: number | null // 對本批數量的增減；轉移方向較複雜，以 detail 說明
+  delta: number | null
   detail: string
   operator: string | null
-  remark: string | null
+  adjustmentLogId?: number
 }
 
 const typeBadge: Record<LedgerType, string> = {
@@ -26,147 +49,195 @@ const typeBadge: Record<LedgerType, string> = {
   出庫: 'bg-primary',
   報廢: 'bg-dark',
   轉移: 'bg-warning text-dark',
+  調整: 'bg-secondary',
 }
+const AllTypes: LedgerType[] = ['入庫', '捐贈', '出庫', '報廢', '轉移', '調整']
 
 export function ItemLedger() {
-  const [items, setItems] = useState<SupplyItem[]>([])
+  const [entries, setEntries] = useState<LedgerEntry[]>([])
+  const [items, setItems] = useState<LedgerItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
 
-  const [selected, setSelected] = useState<SupplyItem | null>(null)
-  const [entries, setEntries] = useState<LedgerEntry[]>([])
-  const [ledgerLoading, setLedgerLoading] = useState(false)
-
-  useEffect(() => {
-    Promise.all([
-      supabase.from('supply_item').select('*').eq('is_active', true).order('id', { ascending: false }),
-      supabase.from('supply_location').select('*').order('id'),
-    ]).then(([itemRes, locRes]) => {
-      setItems((itemRes.data ?? []) as SupplyItem[])
-      setLocations((locRes.data ?? []) as SupplyLocation[])
-      setLoading(false)
-    })
-  }, [])
+  // 調整（盤點修正）視窗
+  const [adjustItem, setAdjustItem] = useState<LedgerItem | null>(null)
+  const [adjustQty, setAdjustQty] = useState('')
+  const [adjustReason, setAdjustReason] = useState('')
+  const [adjustSaving, setAdjustSaving] = useState(false)
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
   }
 
-  const filtered = useMemo(() => {
-    return items.filter((i) => {
-      if (locationFilter && i.location_id !== Number(locationFilter)) return false
-      if (keyword.trim()) {
-        const k = keyword.trim().toLowerCase()
-        return (
-          i.item_name.toLowerCase().includes(k) ||
-          i.category.toLowerCase().includes(k) ||
-          (i.specification ?? '').toLowerCase().includes(k)
-        )
-      }
-      return true
-    })
-  }, [items, keyword, locationFilter])
-
-  async function openLedger(item: SupplyItem) {
-    setSelected(item)
-    setLedgerLoading(true)
-
-    const [outRes, donRes, disRes, trfRes, stockRes] = await Promise.all([
-      supabase.from('supply_outbound_log').select('*').eq('supply_item_id', item.id),
-      supabase.from('supply_donation_log').select('*').eq('supply_item_id', item.id),
-      supabase.from('supply_disposal_log').select('*').eq('supply_item_id', item.id),
-      supabase.from('supply_transfer_log').select('*').eq('supply_item_id', item.id),
-      supabase.from('supply_stock_in_log').select('*').eq('supply_item_id', item.id).order('stock_in_time').limit(1),
+  async function load() {
+    setLoading(true)
+    const [itemRes, locRes, stockRes, donRes, outRes, disRes, trfRes, adjRes] = await Promise.all([
+      supabase.from('supply_item').select('id, category, item_name, specification, unit, quantity, location_id, created_at, remark'),
+      supabase.from('supply_location').select('*').order('id'),
+      supabase.from('supply_stock_in_log').select('supply_item_id, stock_in_quantity, stock_in_time, donor_name, operator, remark').limit(5000),
+      supabase.from('supply_donation_log').select('supply_item_id, donation_quantity, donation_time, donor_name, operator, remark').limit(5000),
+      supabase.from('supply_outbound_log').select('supply_item_id, outbound_quantity, outbound_time, recipient_name, is_cancelled, operator, remark').limit(5000),
+      supabase.from('supply_disposal_log').select('supply_item_id, disposal_quantity, disposal_time, reason, operator, remark').limit(5000),
+      supabase.from('supply_transfer_log').select('supply_item_id, transfer_quantity, from_location_id, to_location_id, transfer_time, status, operator, remark').limit(5000),
+      supabase.from('supply_adjustment_log').select('*').limit(5000),
     ])
 
-    const list: LedgerEntry[] = []
+    const itemList = (itemRes.data ?? []) as LedgerItem[]
+    const locs = (locRes.data ?? []) as SupplyLocation[]
+    const itemById = new Map(itemList.map((i) => [i.id, i]))
+    const locName = (id: number) => locs.find((l) => l.id === id)?.location_name ?? `#${id}`
 
-    // 第一筆：入庫（該批建立）。若有入庫來源紀錄，帶入捐贈人與操作人。
-    const src = ((stockRes.data ?? []) as Record<string, unknown>[])[0]
-    const donor = (src?.donor_name as string)?.trim()
-    list.push({
-      time: (src?.stock_in_time as string) ?? item.created_at,
-      type: '入庫',
-      delta: item.quantity,
-      detail: `建立批次，初始數量 ${item.quantity} ${item.unit ?? ''}${donor ? `；捐贈人 ${donor}` : ''}`,
-      operator: (src?.operator as string) ?? null,
-      remark: (src?.remark as string) ?? item.remark ?? null,
+    const list: LedgerEntry[] = []
+    const base = (it: LedgerItem) => ({
+      itemId: it.id,
+      category: it.category,
+      itemName: it.item_name,
+      specification: it.specification,
+      unit: it.unit,
+      currentQty: it.quantity,
+      locationId: it.location_id,
     })
 
-    for (const o of (outRes.data ?? []) as Record<string, unknown>[]) {
-      // 已取消（回庫）的出庫：庫存已退回，淨變動為 0，明細標註「已取消」避免重複扣。
-      const cancelled = o.is_cancelled === true
+    // 入庫：有入庫來源紀錄就用它；沒有的批次以建立時間補一筆。
+    const hasStockIn = new Set<number>()
+    for (const s of (stockRes.data ?? []) as Record<string, unknown>[]) {
+      const it = itemById.get(s.supply_item_id as number)
+      if (!it) continue
+      hasStockIn.add(it.id)
+      const donor = (s.donor_name as string)?.trim()
       list.push({
-        time: o.outbound_time as string,
-        type: '出庫',
-        delta: cancelled ? 0 : -(o.outbound_quantity as number),
-        detail: `發放給 ${o.recipient_name ?? '—'}${cancelled ? `（已取消回庫 ${o.outbound_quantity}）` : ''}`,
-        operator: (o.operator as string) ?? null,
-        remark: (o.remark as string) ?? null,
+        ...base(it), key: `in-${it.id}-${s.stock_in_time}`, time: s.stock_in_time as string, type: '入庫',
+        delta: s.stock_in_quantity as number,
+        detail: `入庫${donor ? `（捐贈人 ${donor}）` : ''}`,
+        operator: (s.operator as string) ?? null,
       })
     }
+    for (const it of itemList) {
+      if (hasStockIn.has(it.id)) continue
+      list.push({ ...base(it), key: `in0-${it.id}`, time: it.created_at, type: '入庫', delta: it.quantity, detail: '建立批次', operator: null })
+    }
+
     for (const d of (donRes.data ?? []) as Record<string, unknown>[]) {
-      list.push({
-        time: d.donation_time as string,
-        type: '捐贈',
-        delta: d.donation_quantity as number,
-        detail: `捐贈人 ${d.donor_name ?? '—'}`,
-        operator: (d.operator as string) ?? null,
-        remark: (d.remark as string) ?? null,
-      })
+      const it = itemById.get(d.supply_item_id as number); if (!it) continue
+      list.push({ ...base(it), key: `don-${it.id}-${d.donation_time}`, time: d.donation_time as string, type: '捐贈', delta: d.donation_quantity as number, detail: `捐贈人 ${d.donor_name ?? '—'}`, operator: (d.operator as string) ?? null })
+    }
+    for (const o of (outRes.data ?? []) as Record<string, unknown>[]) {
+      const it = itemById.get(o.supply_item_id as number); if (!it) continue
+      const cancelled = o.is_cancelled === true
+      list.push({ ...base(it), key: `out-${it.id}-${o.outbound_time}`, time: o.outbound_time as string, type: '出庫', delta: cancelled ? 0 : -(o.outbound_quantity as number), detail: `發放給 ${o.recipient_name ?? '—'}${cancelled ? `（已取消回庫 ${o.outbound_quantity}）` : ''}`, operator: (o.operator as string) ?? null })
     }
     for (const d of (disRes.data ?? []) as Record<string, unknown>[]) {
-      list.push({
-        time: d.disposal_time as string,
-        type: '報廢',
-        delta: -(d.disposal_quantity as number),
-        detail: `原因：${d.reason ?? '—'}`,
-        operator: (d.operator as string) ?? null,
-        remark: (d.remark as string) ?? null,
-      })
+      const it = itemById.get(d.supply_item_id as number); if (!it) continue
+      list.push({ ...base(it), key: `dis-${it.id}-${d.disposal_time}`, time: d.disposal_time as string, type: '報廢', delta: -(d.disposal_quantity as number), detail: `原因：${d.reason ?? '—'}`, operator: (d.operator as string) ?? null })
     }
     for (const t of (trfRes.data ?? []) as Record<string, unknown>[]) {
-      list.push({
-        time: t.transfer_time as string,
-        type: '轉移',
-        delta: null,
-        detail: `${locationName(t.from_location_id as number)} → ${locationName(t.to_location_id as number)}（${t.transfer_quantity} ${item.unit ?? ''}，${t.status}）`,
-        operator: (t.operator as string) ?? null,
-        remark: (t.remark as string) ?? null,
-      })
+      const it = itemById.get(t.supply_item_id as number); if (!it) continue
+      list.push({ ...base(it), key: `trf-${it.id}-${t.transfer_time}`, time: t.transfer_time as string, type: '轉移', delta: null, detail: `${locName(t.from_location_id as number)} → ${locName(t.to_location_id as number)}（${t.transfer_quantity} ${it.unit ?? ''}，${t.status}）`, operator: (t.operator as string) ?? null })
+    }
+    for (const a of (adjRes.data ?? []) as Record<string, unknown>[]) {
+      const it = itemById.get(a.supply_item_id as number); if (!it) continue
+      list.push({ ...base(it), key: `adj-${a.id}`, time: a.adjusted_at as string, type: '調整', delta: a.delta as number, detail: `盤點修正 ${a.quantity_before}→${a.quantity_after}${a.reason ? `（${a.reason}）` : ''}`, operator: (a.operator as string) ?? null, adjustmentLogId: a.id as number })
     }
 
-    list.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
+    // 依「批次(id) 由大到小，同批次內時間由早到晚」排序，讓每筆物資的異動聚在一起、第一筆是入庫。
+    list.sort((x, y) => (x.itemId !== y.itemId ? y.itemId - x.itemId : x.time < y.time ? -1 : x.time > y.time ? 1 : 0))
+
+    setItems(itemList)
+    setLocations(locs)
     setEntries(list)
-    setLedgerLoading(false)
+    setLoading(false)
   }
 
-  function handleExportLedger() {
-    if (!selected) return
-    exportToExcel<LedgerEntry>(
-      `物資明細_${selected.item_name}`,
-      '物資明細',
-      [
-        { header: '時間', value: (e) => new Date(e.time).toLocaleString('zh-TW') },
-        { header: '類型', value: (e) => e.type },
-        { header: '數量增減', value: (e) => (e.delta == null ? '' : e.delta) },
-        { header: '說明', value: (e) => e.detail },
-        { header: '操作人', value: (e) => e.operator ?? '' },
-        { header: '備註', value: (e) => e.remark ?? '' },
-      ],
-      entries
-    )
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const filtered = useMemo(() => {
+    const k = keyword.trim().toLowerCase()
+    return entries.filter((e) => {
+      if (locationFilter && e.locationId !== Number(locationFilter)) return false
+      if (typeFilter && e.type !== typeFilter) return false
+      if (k && !`${e.category} ${e.itemName} ${e.specification ?? ''}`.toLowerCase().includes(k)) return false
+      return true
+    })
+  }, [entries, keyword, locationFilter, typeFilter])
+
+  function handleExport() {
+    exportToExcel<LedgerEntry>('物資明細', '物資明細', [
+      { header: '流水號', value: (e) => e.itemId },
+      { header: '種類', value: (e) => e.category },
+      { header: '名稱', value: (e) => e.itemName },
+      { header: '規格', value: (e) => e.specification ?? '' },
+      { header: '類型', value: (e) => e.type },
+      { header: '增減數量', value: (e) => (e.delta == null ? '' : e.delta) },
+      { header: '說明', value: (e) => e.detail },
+      { header: '目前數量', value: (e) => e.currentQty },
+      { header: '所在據點', value: (e) => locationName(e.locationId) },
+      { header: '時間', value: (e) => new Date(e.time).toLocaleString('zh-TW') },
+      { header: '操作人', value: (e) => e.operator ?? '' },
+    ], filtered)
+  }
+
+  function openAdjust(itemId: number) {
+    const it = items.find((i) => i.id === itemId)
+    if (!it) return
+    setAdjustItem(it)
+    setAdjustQty(String(it.quantity))
+    setAdjustReason('')
+    setError(null)
+  }
+
+  async function submitAdjust(e: FormEvent) {
+    e.preventDefault()
+    if (!adjustItem) return
+    const n = Number(adjustQty)
+    if (!Number.isInteger(n) || n < 0) {
+      setError('調整後數量必須是 0 或正整數')
+      return
+    }
+    setAdjustSaving(true)
+    const { error: rpcErr } = await supabase.rpc('stock_adjust', {
+      p_supply_item_id: adjustItem.id,
+      p_new_quantity: n,
+      p_reason: adjustReason.trim() || null,
+    })
+    setAdjustSaving(false)
+    if (rpcErr) {
+      setError(rpcErr.message)
+      return
+    }
+    setAdjustItem(null)
+    void load()
+  }
+
+  async function deleteAdjust(logId: number) {
+    if (!confirm('確定刪除這筆調整嗎？系統會把當初的增減回算回去。')) return
+    const { error: rpcErr } = await supabase.rpc('stock_adjust_delete', { p_log_id: logId })
+    if (rpcErr) {
+      setError(rpcErr.message)
+      return
+    }
+    void load()
   }
 
   return (
     <div className="container-fluid mt-4">
-      <h2 className="mb-4">
-        <i className="bi bi-clock-history" /> 物資明細
-      </h2>
-      <p className="text-muted">每一筆物資從入庫到後續出庫／捐贈／報廢／轉移的完整異動歷程（總管專用）。</p>
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <h2 className="mb-0">
+          <i className="bi bi-clock-history" /> 物資明細
+        </h2>
+        <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
+          <i className="bi bi-file-earmark-excel" /> 匯出 Excel
+        </button>
+      </div>
+      <p className="text-muted">每一筆物資從入庫到後續 出庫／捐贈／報廢／轉移／調整 的完整異動歷程（總管專用）。</p>
+      <FlashMessage />
+      {error && <div className="alert alert-danger">{error}</div>}
 
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">
@@ -174,30 +245,30 @@ export function ItemLedger() {
         </div>
         <div className="card-body">
           <div className="row g-3">
-            <div className="col-md-6">
+            <div className="col-md-5">
               <label className="form-label">關鍵字</label>
               <input className="form-control" placeholder="物資名稱、種類、規格" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
             </div>
-            <div className="col-md-4">
+            <div className="col-md-2">
+              <label className="form-label">類型</label>
+              <select className="form-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="">全部類型</option>
+                {AllTypes.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3">
               <label className="form-label">據點</label>
               <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
                 <option value="">全部據點</option>
                 {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.location_name}
-                  </option>
+                  <option key={l.id} value={l.id}>{l.location_name}</option>
                 ))}
               </select>
             </div>
             <div className="col-md-2 d-flex align-items-end">
-              <button
-                type="button"
-                className="btn btn-secondary w-100"
-                onClick={() => {
-                  setKeyword('')
-                  setLocationFilter('')
-                }}
-              >
+              <button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setLocationFilter(''); setTypeFilter('') }}>
                 <i className="bi bi-arrow-clockwise" /> 重設
               </button>
             </div>
@@ -215,45 +286,44 @@ export function ItemLedger() {
                   <th>種類</th>
                   <th>名稱</th>
                   <th>規格</th>
-                  <th className="col-min">目前數量</th>
+                  <th className="col-min">類型</th>
+                  <th className="col-min text-end">增減數量</th>
+                  <th>說明</th>
+                  <th className="col-min text-end">目前數量</th>
                   <th className="col-min">所在據點</th>
                   <th className="col-min">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-4 text-muted">
-                      載入中…
-                    </td>
-                  </tr>
+                  <tr><td colSpan={10} className="text-center py-4 text-muted">載入中…</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-4 text-muted">
-                      沒有符合條件的物資
-                    </td>
-                  </tr>
+                  <tr><td colSpan={10} className="text-center py-4 text-muted">沒有符合條件的異動</td></tr>
                 ) : (
-                  filtered.map((item) => (
-                    <tr key={item.id}>
-                      <td className="col-min">#{item.id}</td>
-                      <td>{item.category}</td>
-                      <td>
-                        <strong>{item.item_name}</strong>
+                  filtered.map((e) => (
+                    <tr key={e.key}>
+                      <td className="col-min text-muted">#{e.itemId}</td>
+                      <td>{e.category}</td>
+                      <td><strong>{e.itemName}</strong></td>
+                      <td>{e.specification ?? '無'}</td>
+                      <td className="col-min"><span className={`badge ${typeBadge[e.type]}`}>{e.type}</span></td>
+                      <td className={`col-min text-end ${e.delta == null ? '' : e.delta >= 0 ? 'text-success' : 'text-danger'}`}>
+                        {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta}` : e.delta} {e.delta == null ? '' : e.unit ?? ''}
                       </td>
-                      <td>{item.specification ?? '無'}</td>
+                      <td>{e.detail}</td>
+                      <td className="col-min text-end">{e.currentQty} {e.unit ?? ''}</td>
                       <td className="col-min">
-                        {item.quantity} {item.unit}
+                        <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
                       </td>
-                      <td className="col-min">
-                        <span className="badge" style={locationColorStyle(item.location_id)}>
-                          {locationName(item.location_id)}
-                        </span>
-                      </td>
-                      <td className="col-min">
-                        <button className="btn btn-sm btn-primary" onClick={() => void openLedger(item)}>
-                          <i className="bi bi-clock-history" /> 查看明細
+                      <td className="col-min text-nowrap">
+                        <button className="btn btn-sm btn-outline-secondary me-1" title="盤點調整此批次數量" onClick={() => openAdjust(e.itemId)}>
+                          <i className="bi bi-sliders" /> 調整
                         </button>
+                        {e.type === '調整' && e.adjustmentLogId != null && (
+                          <button className="btn btn-sm btn-outline-danger" title="刪除此調整並回算" onClick={() => void deleteAdjust(e.adjustmentLogId!)}>
+                            <i className="bi bi-trash" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -261,65 +331,43 @@ export function ItemLedger() {
               </tbody>
             </table>
           </div>
+          <div className="mt-3"><p className="text-muted mb-0">共 {filtered.length} 筆異動</p></div>
         </div>
       </div>
 
-      {/* 明細時間軸 */}
-      {selected && (
+      {/* 調整（盤點修正） */}
+      {adjustItem && (
         <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+          <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">
-                  <i className="bi bi-clock-history" /> {selected.category}｜{selected.item_name}
-                  {selected.specification ? `｜${selected.specification}` : ''}｜{locationName(selected.location_id)}
-                </h5>
-                <button type="button" className="btn-close" onClick={() => setSelected(null)} />
-              </div>
-              <div className="modal-body">
-                {ledgerLoading ? (
-                  <div className="text-center py-4 text-muted">載入異動歷程…</div>
-                ) : (
-                  <div className="table-responsive">
-                    <table className="table table-sm align-middle mb-0" style={{ width: 'auto' }}>
-                      <thead className="table-light">
-                        <tr>
-                          <th>時間</th>
-                          <th>類型</th>
-                          <th>數量增減</th>
-                          <th>說明</th>
-                          <th>操作人</th>
-                          <th>備註</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {entries.map((e, i) => (
-                          <tr key={i}>
-                            <td className="text-nowrap">{new Date(e.time).toLocaleString('zh-TW')}</td>
-                            <td>
-                              <span className={`badge ${typeBadge[e.type]}`}>{e.type}</span>
-                            </td>
-                            <td className={e.delta == null ? '' : e.delta >= 0 ? 'text-success' : 'text-danger'}>
-                              {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta}` : e.delta}
-                            </td>
-                            <td>{e.detail}</td>
-                            <td>{e.operator ?? '—'}</td>
-                            <td>{e.remark ?? '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              <form onSubmit={submitAdjust}>
+                <div className="modal-header">
+                  <h5 className="modal-title"><i className="bi bi-sliders" /> 盤點調整</h5>
+                  <button type="button" className="btn-close" onClick={() => setAdjustItem(null)} />
+                </div>
+                <div className="modal-body">
+                  <div className="alert alert-light border small mb-3">
+                    #{adjustItem.id}｜{adjustItem.category}｜{adjustItem.item_name}
+                    {adjustItem.specification ? `｜${adjustItem.specification}` : ''}｜{locationName(adjustItem.location_id)}
+                    <div className="text-muted">目前數量 {adjustItem.quantity} {adjustItem.unit ?? ''}</div>
                   </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-outline-success" onClick={handleExportLedger} disabled={ledgerLoading || entries.length === 0}>
-                  <i className="bi bi-file-earmark-excel" /> 匯出報表
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => setSelected(null)}>
-                  關閉
-                </button>
-              </div>
+                  <div className="mb-3">
+                    <label className="form-label">調整後數量 *</label>
+                    <input className="form-control" type="number" min={0} required value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} />
+                    <div className="form-text">
+                      將把目前數量修正為此值，並在明細留一筆「調整」（增減 {Number.isFinite(Number(adjustQty)) ? Number(adjustQty) - adjustItem.quantity : 0}）。
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">原因／說明</label>
+                    <input className="form-control" placeholder="例如：盤點盤盈、損耗、輸入錯誤更正" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setAdjustItem(null)}>取消</button>
+                  <button type="submit" className="btn btn-primary" disabled={adjustSaving}>{adjustSaving ? '處理中…' : '確認調整'}</button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
