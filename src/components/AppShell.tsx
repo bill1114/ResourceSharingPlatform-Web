@@ -61,11 +61,6 @@ export function AppShell() {
                         <i className="bi bi-gift" /> 物資捐贈
                       </NavLink>
                     </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/disposals/create">
-                        <i className="bi bi-trash3" /> 物資報廢
-                      </NavLink>
-                    </li>
                     {isAdminOrCadre && (
                       <li>
                         <NavLink className="dropdown-item" to="/transfers/create">
@@ -136,10 +131,15 @@ export function AppShell() {
                       <i className="bi bi-gear" /> 系統管理
                     </a>
                     <ul className="dropdown-menu">
-                      {/* p.11：物資清單移入系統管理；p.16：物資明細（調整/報廢 + 異動歷程）。 */}
+                      {/* p.11：物資清單移入系統管理；p.16：物資報廢/物資明細改總管專用。 */}
                       <li>
                         <NavLink className="dropdown-item" to="/supply-items">
                           <i className="bi bi-boxes" /> 物資清單
+                        </NavLink>
+                      </li>
+                      <li>
+                        <NavLink className="dropdown-item" to="/disposals/create">
+                          <i className="bi bi-trash3" /> 物資報廢
                         </NavLink>
                       </li>
                       <li>

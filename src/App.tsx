@@ -78,7 +78,14 @@ function App() {
         <Route path="/donations/donor-analysis" element={<DonorAnalysis />} />
         <Route path="/donations/create" element={<SupplyDonationCreate />} />
         <Route path="/donations" element={<SupplyDonationIndex />} />
-        <Route path="/disposals/create" element={<SupplyDisposalCreate />} />
+        <Route
+          path="/disposals/create"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <SupplyDisposalCreate />
+            </RoleGate>
+          }
+        />
         <Route path="/disposals" element={<SupplyDisposalIndex />} />
         <Route
           path="/item-ledger"

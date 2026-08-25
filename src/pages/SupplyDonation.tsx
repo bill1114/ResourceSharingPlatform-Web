@@ -10,10 +10,11 @@ import { functionErrorMessage } from '../lib/functionError'
 import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
 import { StockBatchPicker } from '../components/StockBatchPicker'
+import { DistrictPickerModal } from '../components/OutboundModals'
 import { FlashMessage } from '../components/FlashMessage'
 import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import { exportToExcel } from '../lib/excelExport'
-import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
+import { recipientIdentityDisplayName, AllRecipientIdentities } from '../lib/yunlinDistricts'
 import type { SupplyItem, SupplyLocation, DonationSource } from '../types/db'
 
 interface DonorSummaryRow {
@@ -37,6 +38,11 @@ export function SupplyDonationCreate() {
   const [quantity, setQuantity] = useState('')
   const [donorName, setDonorName] = useState('')
   const [donorContact, setDonorContact] = useState('')
+  const [donorAddress, setDonorAddress] = useState('')
+  const [donorPrecinct, setDonorPrecinct] = useState<string | null>(null)
+  const [donorDistrict, setDonorDistrict] = useState<string | null>(null)
+  const [donorIdentity, setDonorIdentity] = useState('')
+  const [showDistrictModal, setShowDistrictModal] = useState(false)
   const [remark, setRemark] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -96,6 +102,10 @@ export function SupplyDonationCreate() {
         donorName,
         donorContact,
         remark,
+        donorAddress,
+        donorPrecinct,
+        donorDistrict,
+        donorIdentity,
       },
     })
     setSubmitting(false)
@@ -171,14 +181,33 @@ export function SupplyDonationCreate() {
                     />
                   </div>
                   <div className="col-md-6 mb-3">
-                    <label className="form-label">捐贈者聯絡方式</label>
+                    <label className="form-label">捐贈者電話</label>
                     <input
                       className="form-control"
                       maxLength={50}
-                      placeholder="例如：手機或地址"
+                      placeholder="例如：0912-345-678"
                       value={donorContact}
                       onChange={(e) => setDonorContact(e.target.value)}
                     />
+                  </div>
+                  <div className="col-md-12 mb-3">
+                    <label className="form-label">捐贈者地址</label>
+                    <input className="form-control" placeholder="例如：雲林縣斗六市…（選填）" value={donorAddress} onChange={(e) => setDonorAddress(e.target.value)} />
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">所屬鄉鎮</label>
+                    <div className="input-group">
+                      <input className="form-control" readOnly placeholder="未選擇（選填）" value={donorDistrict ? `${donorDistrict}${donorPrecinct ? `（${donorPrecinct}）` : ''}` : ''} />
+                      <button type="button" className="btn btn-outline-secondary" onClick={() => setShowDistrictModal(true)}>選擇</button>
+                      {donorDistrict && <button type="button" className="btn btn-outline-secondary" onClick={() => { setDonorPrecinct(null); setDonorDistrict(null) }} title="清除"><i className="bi bi-x" /></button>}
+                    </div>
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">身分別</label>
+                    <select className="form-select" value={donorIdentity} onChange={(e) => setDonorIdentity(e.target.value)}>
+                      <option value="">未選擇（選填）</option>
+                      {AllRecipientIdentities.map((id) => <option key={id} value={id}>{recipientIdentityDisplayName(id)}</option>)}
+                    </select>
                   </div>
                 </div>
 
@@ -247,7 +276,10 @@ export function SupplyDonationCreate() {
           onConfirm={() => void doDonation()}
           fields={[
             { label: '捐贈人', value: donorName.trim() || <span className="text-muted">未填</span> },
-            { label: '聯絡方式', value: donorContact.trim() || <span className="text-muted">未填</span> },
+            { label: '聯絡電話', value: donorContact.trim() || <span className="text-muted">未填</span> },
+            ...(donorDistrict ? [{ label: '所屬鄉鎮', value: `${donorDistrict}${donorPrecinct ? `（${donorPrecinct}）` : ''}` }] : []),
+            ...(donorIdentity ? [{ label: '身分別', value: recipientIdentityDisplayName(donorIdentity) }] : []),
+            ...(donorAddress.trim() ? [{ label: '捐贈者地址', value: donorAddress.trim(), full: true }] : []),
             { label: '捐入據點', value: locationName(locationId) },
             { label: '操作人員', value: operatorName || '—' },
             ...(remark.trim() ? [{ label: '備註', value: remark.trim(), full: true }] : []),
@@ -266,6 +298,19 @@ export function SupplyDonationCreate() {
           extraHeader="捐贈數量"
           extraColHeader="捐贈後庫存"
           warning={<>按下「確認捐贈」後會<strong>立刻增加該批次庫存</strong>。請再確認一次品項與數量（右欄為捐贈後庫存）。</>}
+        />
+      )}
+
+      {showDistrictModal && (
+        <DistrictPickerModal
+          currentPrecinct={donorPrecinct}
+          currentDistrict={donorDistrict}
+          onCancel={() => setShowDistrictModal(false)}
+          onSelect={(precinct, district) => {
+            setDonorPrecinct(precinct)
+            setDonorDistrict(district)
+            setShowDistrictModal(false)
+          }}
         />
       )}
     </div>
