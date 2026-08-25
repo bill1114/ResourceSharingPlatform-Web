@@ -44,7 +44,8 @@ export interface InventoryItemVariant {
   id: number
   inventory_item_definition_id: number
   specification: string | null
-  global_safety_stock: number
+  global_safety_stock: number // 安全庫存量（保留量）
+  global_threshold: number // 募資門檻；當前總庫存 < 門檻 − 安全庫存量 時列為總量不足／啟動募資
   is_active: boolean
   created_at: string
   updated_at: string | null

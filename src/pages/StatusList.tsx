@@ -34,6 +34,7 @@ interface GlobalLowRow {
   specification: string | null
   unit: string
   global_safety_stock: number
+  global_threshold: number
   total_quantity: number
 }
 
@@ -68,7 +69,7 @@ export function StatusList() {
       const [itemsRes, locRes, globalRes, low] = await Promise.all([
         supabase.from('supply_item').select('*').eq('is_active', true).order('expiration_date', { ascending: true, nullsFirst: false }),
         supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
-        supabase.from('global_low_stock_view').select('category, item_name, specification, unit, global_safety_stock, total_quantity'),
+        supabase.from('global_low_stock_view').select('category, item_name, specification, unit, global_safety_stock, global_threshold, total_quantity'),
         fetchLowStock(),
       ])
       setItems((itemsRes.data ?? []) as SupplyItem[])
@@ -103,7 +104,7 @@ export function StatusList() {
         locationId: null,
         quantity: g.total_quantity,
         expiration: null,
-        note: `總量安全門檻 ${g.global_safety_stock} ${g.unit}（請啟動募資）`,
+        note: `募資觸發點 ${Math.max(0, g.global_threshold - g.global_safety_stock)} ${g.unit}（門檻 ${g.global_threshold} − 安全 ${g.global_safety_stock}，請啟動募資）`,
       }))
     }
     const picked = items.filter((it) => {

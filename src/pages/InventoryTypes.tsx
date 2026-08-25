@@ -44,6 +44,7 @@ export function InventoryTypes() {
   const [newSpec, setNewSpec] = useState('')
   const [globalSafetyEditorFor, setGlobalSafetyEditorFor] = useState<InventoryItemDefinition | null>(null)
   const [globalSafetyDraft, setGlobalSafetyDraft] = useState<Record<number, string>>({})
+  const [globalThresholdDraft, setGlobalThresholdDraft] = useState<Record<number, string>>({})
 
   const [safetyEditorFor, setSafetyEditorFor] = useState<InventoryItemDefinition | null>(null)
   const [safetyDraft, setSafetyDraft] = useState<Record<number, string>>({})
@@ -95,7 +96,8 @@ export function InventoryTypes() {
   }
 
   function globalSafetyConfiguredCount(defId: number): number {
-    return variants.filter((v) => v.inventory_item_definition_id === defId && v.is_active && v.global_safety_stock > 0).length
+    // 有設門檻（global_threshold > 0）才算「已開啟監控」。
+    return variants.filter((v) => v.inventory_item_definition_id === defId && v.is_active && v.global_threshold > 0).length
   }
 
   function openCreate() {
@@ -161,6 +163,7 @@ export function InventoryTypes() {
       inventory_item_definition_id: variantEditorFor.id,
       specification: newSpec.trim() || null,
       global_safety_stock: 0,
+      global_threshold: 0,
       is_active: true,
     })
     if (error) {
@@ -173,10 +176,13 @@ export function InventoryTypes() {
 
   function openGlobalSafetyEditor(def: InventoryItemDefinition) {
     const draft: Record<number, string> = {}
+    const thresholdDraft: Record<number, string> = {}
     for (const variant of variants.filter((v) => v.inventory_item_definition_id === def.id && v.is_active)) {
       draft[variant.id] = (variant.global_safety_stock ?? 0).toString()
+      thresholdDraft[variant.id] = (variant.global_threshold ?? 0).toString()
     }
     setGlobalSafetyDraft(draft)
+    setGlobalThresholdDraft(thresholdDraft)
     setGlobalSafetyEditorFor(def)
   }
 
@@ -193,7 +199,11 @@ export function InventoryTypes() {
       targetVariants.map((variant) =>
         supabase
           .from('inventory_item_variant')
-          .update({ global_safety_stock: Math.max(0, Number(globalSafetyDraft[variant.id] ?? 0) || 0), updated_at: new Date().toISOString() })
+          .update({
+            global_safety_stock: Math.max(0, Number(globalSafetyDraft[variant.id] ?? 0) || 0),
+            global_threshold: Math.max(0, Number(globalThresholdDraft[variant.id] ?? 0) || 0),
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', variant.id)
       )
     )
@@ -516,28 +526,52 @@ export function InventoryTypes() {
                 <button type="button" className="btn-close" onClick={() => setGlobalSafetyEditorFor(null)} />
               </div>
               <div className="modal-body">
-                <div className="alert alert-warning small">
-                  系統會加總所有據點的同一規格庫存；低於此固定門檻時，戰情總覽會列為「總量不足」，提醒啟動募資。設定為 0 表示不監控。
+                <div className="alert alert-warning small mb-3">
+                  系統會加總所有據點的同一規格庫存。<strong>募資啟動條件：當前總庫存 &lt; 門檻 − 安全庫存量</strong>。
+                  門檻設為 0 表示不監控該規格。
                 </div>
                 <table className="table align-middle mb-0">
-                  <thead><tr><th>規格</th><th>總量安全庫存（{globalSafetyEditorFor.unit}）</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>規格</th>
+                      <th>門檻（{globalSafetyEditorFor.unit}）</th>
+                      <th>安全庫存量（{globalSafetyEditorFor.unit}）</th>
+                      <th className="text-muted small">觸發點</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {variants.filter((v) => v.inventory_item_definition_id === globalSafetyEditorFor.id && v.is_active).map((variant) => (
-                      <tr key={variant.id}>
-                        <td>{variant.specification ?? '無規格'}</td>
-                        <td>
-                          <input
-                            className="form-control"
-                            type="number"
-                            min={0}
-                            value={globalSafetyDraft[variant.id] ?? '0'}
-                            onChange={(e) => setGlobalSafetyDraft({ ...globalSafetyDraft, [variant.id]: e.target.value })}
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                    {variants.filter((v) => v.inventory_item_definition_id === globalSafetyEditorFor.id && v.is_active).map((variant) => {
+                      const trigger = Math.max(0, (Number(globalThresholdDraft[variant.id] ?? 0) || 0) - (Number(globalSafetyDraft[variant.id] ?? 0) || 0))
+                      const monitored = (Number(globalThresholdDraft[variant.id] ?? 0) || 0) > 0
+                      return (
+                        <tr key={variant.id}>
+                          <td>{variant.specification ?? '無規格'}</td>
+                          <td>
+                            <input
+                              className="form-control"
+                              type="number"
+                              min={0}
+                              value={globalThresholdDraft[variant.id] ?? '0'}
+                              onChange={(e) => setGlobalThresholdDraft({ ...globalThresholdDraft, [variant.id]: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="form-control"
+                              type="number"
+                              min={0}
+                              value={globalSafetyDraft[variant.id] ?? '0'}
+                              onChange={(e) => setGlobalSafetyDraft({ ...globalSafetyDraft, [variant.id]: e.target.value })}
+                            />
+                          </td>
+                          <td className="small">
+                            {monitored ? <>低於 <strong>{trigger}</strong> 時募資</> : <span className="text-muted">未監控</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
                     {variants.filter((v) => v.inventory_item_definition_id === globalSafetyEditorFor.id && v.is_active).length === 0 && (
-                      <tr><td colSpan={2} className="text-muted text-center py-4">請先在「規格」中新增規格。</td></tr>
+                      <tr><td colSpan={4} className="text-muted text-center py-4">請先在「規格」中新增規格。</td></tr>
                     )}
                   </tbody>
                 </table>
