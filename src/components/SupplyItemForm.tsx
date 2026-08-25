@@ -309,7 +309,7 @@ export function SupplyItemForm({
             value={form.donorName}
             onChange={(e) => setForm({ ...form, donorName: e.target.value })}
           />
-          <div className="form-text">填寫後，本次入庫會記入捐贈紀錄與捐贈分析。</div>
+          <div className="form-text">填寫後，本次入庫的捐贈人會出現在「捐贈分析」（含物流追蹤）。</div>
         </div>
         <div className="col-md-6 mb-3">
           <label className="form-label">捐贈者電話</label>

@@ -94,11 +94,13 @@ export function ItemLedger() {
     })
 
     for (const o of (outRes.data ?? []) as Record<string, unknown>[]) {
+      // 已取消（回庫）的出庫：庫存已退回，淨變動為 0，明細標註「已取消」避免重複扣。
+      const cancelled = o.is_cancelled === true
       list.push({
         time: o.outbound_time as string,
         type: '出庫',
-        delta: -(o.outbound_quantity as number),
-        detail: `發放給 ${o.recipient_name ?? '—'}`,
+        delta: cancelled ? 0 : -(o.outbound_quantity as number),
+        detail: `發放給 ${o.recipient_name ?? '—'}${cancelled ? `（已取消回庫 ${o.outbound_quantity}）` : ''}`,
         operator: (o.operator as string) ?? null,
         remark: (o.remark as string) ?? null,
       })

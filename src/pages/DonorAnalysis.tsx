@@ -22,6 +22,7 @@ interface DonationRow {
   source: '捐贈' | '入庫'
   donorName: string
   donorContact: string
+  donorAddress: string
   supplyItemId: number
   quantity: number
   time: string
@@ -52,6 +53,7 @@ interface DonorGroup {
   donorName: string
   donorContact: string
   donations: DonationRow[]
+  address: string // 代表性聯絡地址（來自入庫來源紀錄，取最近一筆有填的）
   totalQuantity: number
   itemIds: number[]
   issuedQuantity: number // 這些批次後續已發放件數（批次層級）
@@ -77,7 +79,7 @@ export function DonorAnalysis() {
       setLoading(true)
       const [donRes, stockRes, outRes, itemRes, locRes] = await Promise.all([
         supabase.from('supply_donation_log').select('supply_item_id, donor_name, donor_contact, donation_quantity, donation_time, location_id').limit(5000),
-        supabase.from('supply_stock_in_log').select('supply_item_id, donor_name, donor_contact, stock_in_quantity, stock_in_time, location_id').not('donor_name', 'is', null).limit(5000),
+        supabase.from('supply_stock_in_log').select('supply_item_id, donor_name, donor_contact, donor_address, stock_in_quantity, stock_in_time, location_id').not('donor_name', 'is', null).limit(5000),
         supabase.from('supply_outbound_log').select('supply_item_id, recipient_name, recipient_contact, recipient_identity, recipient_district, outbound_quantity, outbound_time, is_cancelled').limit(5000),
         supabase.from('supply_item').select('id, item_name, category, specification, unit, quantity, location_id'),
         supabase.from('supply_location').select('id, location_name'),
@@ -87,12 +89,12 @@ export function DonorAnalysis() {
       for (const d of (donRes.data ?? []) as Record<string, unknown>[]) {
         const name = (d.donor_name as string)?.trim()
         if (!name) continue
-        merged.push({ source: '捐贈', donorName: name, donorContact: (d.donor_contact as string) ?? '', supplyItemId: d.supply_item_id as number, quantity: d.donation_quantity as number, time: d.donation_time as string, locationId: d.location_id as number })
+        merged.push({ source: '捐贈', donorName: name, donorContact: (d.donor_contact as string) ?? '', donorAddress: '', supplyItemId: d.supply_item_id as number, quantity: d.donation_quantity as number, time: d.donation_time as string, locationId: d.location_id as number })
       }
       for (const s of (stockRes.data ?? []) as Record<string, unknown>[]) {
         const name = (s.donor_name as string)?.trim()
         if (!name) continue
-        merged.push({ source: '入庫', donorName: name, donorContact: (s.donor_contact as string) ?? '', supplyItemId: s.supply_item_id as number, quantity: s.stock_in_quantity as number, time: s.stock_in_time as string, locationId: s.location_id as number })
+        merged.push({ source: '入庫', donorName: name, donorContact: (s.donor_contact as string) ?? '', donorAddress: (s.donor_address as string) ?? '', supplyItemId: s.supply_item_id as number, quantity: s.stock_in_quantity as number, time: s.stock_in_time as string, locationId: s.location_id as number })
       }
 
       setDonations(merged)
@@ -129,7 +131,7 @@ export function DonorAnalysis() {
       const key = `${d.donorName}||${d.donorContact}`
       let g = map.get(key)
       if (!g) {
-        g = { key, donorName: d.donorName, donorContact: d.donorContact, donations: [], totalQuantity: 0, itemIds: [], issuedQuantity: 0, onHandQuantity: 0, flow: [] }
+        g = { key, donorName: d.donorName, donorContact: d.donorContact, donations: [], address: '', totalQuantity: 0, itemIds: [], issuedQuantity: 0, onHandQuantity: 0, flow: [] }
         map.set(key, g)
       }
       g.donations.push(d)
@@ -157,6 +159,8 @@ export function DonorAnalysis() {
       }
       g.flow = [...recipMap.values()].sort((a, b) => b.quantity - a.quantity)
       g.donations.sort((a, b) => (a.time < b.time ? 1 : -1))
+      // 代表性地址：入庫來源紀錄中最近一筆有填的地址（捐贈紀錄本身沒有地址欄）。
+      g.address = g.donations.find((d) => d.donorAddress.trim())?.donorAddress.trim() ?? ''
     }
 
     return [...map.values()].sort((a, b) => b.totalQuantity - a.totalQuantity)
@@ -188,6 +192,7 @@ export function DonorAnalysis() {
       { header: '排名', value: (g) => groups.indexOf(g) + 1 },
       { header: '捐贈人', value: (g) => g.donorName },
       { header: '聯絡方式', value: (g) => g.donorContact || '' },
+      { header: '聯絡地址', value: (g) => g.address || '' },
       { header: '捐贈筆數', value: (g) => g.donations.length },
       { header: '捐贈件數', value: (g) => g.totalQuantity },
       { header: '不同物資', value: (g) => new Set(g.donations.map((d) => d.supplyItemId)).size },
@@ -319,6 +324,10 @@ export function DonorAnalysis() {
                         <tr className="table-light">
                           <td />
                           <td colSpan={8}>
+                            <div className="small text-muted mb-2">
+                              <i className="bi bi-person-vcard" /> 聯絡方式：{g.donorContact || '未填'}
+                              <span className="ms-3"><i className="bi bi-geo-alt" /> 聯絡地址：{g.address || '未填'}</span>
+                            </div>
                             <div className="row g-3 py-2">
                               {/* 捐贈明細 */}
                               <div className="col-lg-6">
