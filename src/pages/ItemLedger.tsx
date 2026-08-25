@@ -74,23 +74,26 @@ export function ItemLedger() {
     setSelected(item)
     setLedgerLoading(true)
 
-    const [outRes, donRes, disRes, trfRes] = await Promise.all([
+    const [outRes, donRes, disRes, trfRes, stockRes] = await Promise.all([
       supabase.from('supply_outbound_log').select('*').eq('supply_item_id', item.id),
       supabase.from('supply_donation_log').select('*').eq('supply_item_id', item.id),
       supabase.from('supply_disposal_log').select('*').eq('supply_item_id', item.id),
       supabase.from('supply_transfer_log').select('*').eq('supply_item_id', item.id),
+      supabase.from('supply_stock_in_log').select('*').eq('supply_item_id', item.id).order('stock_in_time').limit(1),
     ])
 
     const list: LedgerEntry[] = []
 
-    // 第一筆：入庫（該批建立）
+    // 第一筆：入庫（該批建立）。若有入庫來源紀錄，帶入捐贈人與操作人。
+    const src = ((stockRes.data ?? []) as Record<string, unknown>[])[0]
+    const donor = (src?.donor_name as string)?.trim()
     list.push({
-      time: item.created_at,
+      time: (src?.stock_in_time as string) ?? item.created_at,
       type: '入庫',
       delta: item.quantity,
-      detail: `建立批次，初始數量 ${item.quantity} ${item.unit ?? ''}`,
-      operator: null,
-      remark: item.remark ?? null,
+      detail: `建立批次，初始數量 ${item.quantity} ${item.unit ?? ''}${donor ? `；捐贈人 ${donor}` : ''}`,
+      operator: (src?.operator as string) ?? null,
+      remark: (src?.remark as string) ?? item.remark ?? null,
     })
 
     for (const o of (outRes.data ?? []) as Record<string, unknown>[]) {

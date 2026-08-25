@@ -16,13 +16,15 @@ import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
 import { exportToExcel } from '../lib/excelExport'
-import type { SupplyItem, SupplyLocation } from '../types/db'
+import type { SupplyItem, SupplyLocation, DonationSource } from '../types/db'
 
 interface DonationRow {
   source: '捐贈' | '入庫'
   donorName: string
   donorContact: string
   donorAddress: string
+  donorDistrict: string
+  donorIdentity: string
   supplyItemId: number
   quantity: number
   time: string
@@ -54,6 +56,8 @@ interface DonorGroup {
   donorContact: string
   donations: DonationRow[]
   address: string // 代表性聯絡地址（來自入庫來源紀錄，取最近一筆有填的）
+  district: string // 代表性鄉鎮
+  identity: string // 代表性身分別
   totalQuantity: number
   itemIds: number[]
   issuedQuantity: number // 這些批次後續已發放件數（批次層級）
@@ -77,25 +81,26 @@ export function DonorAnalysis() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [donRes, stockRes, outRes, itemRes, locRes] = await Promise.all([
-        supabase.from('supply_donation_log').select('supply_item_id, donor_name, donor_contact, donation_quantity, donation_time, location_id').limit(5000),
-        supabase.from('supply_stock_in_log').select('supply_item_id, donor_name, donor_contact, donor_address, stock_in_quantity, stock_in_time, location_id').not('donor_name', 'is', null).limit(5000),
+      const [srcRes, outRes, itemRes, locRes] = await Promise.all([
+        // 統一來源：物資捐贈 + 物資入庫(有捐贈人) 都在這個 view 裡。
+        supabase.from('donation_source_view').select('*').limit(10000),
         supabase.from('supply_outbound_log').select('supply_item_id, recipient_name, recipient_contact, recipient_identity, recipient_district, outbound_quantity, outbound_time, is_cancelled').limit(5000),
         supabase.from('supply_item').select('id, item_name, category, specification, unit, quantity, location_id'),
         supabase.from('supply_location').select('id, location_name'),
       ])
 
-      const merged: DonationRow[] = []
-      for (const d of (donRes.data ?? []) as Record<string, unknown>[]) {
-        const name = (d.donor_name as string)?.trim()
-        if (!name) continue
-        merged.push({ source: '捐贈', donorName: name, donorContact: (d.donor_contact as string) ?? '', donorAddress: '', supplyItemId: d.supply_item_id as number, quantity: d.donation_quantity as number, time: d.donation_time as string, locationId: d.location_id as number })
-      }
-      for (const s of (stockRes.data ?? []) as Record<string, unknown>[]) {
-        const name = (s.donor_name as string)?.trim()
-        if (!name) continue
-        merged.push({ source: '入庫', donorName: name, donorContact: (s.donor_contact as string) ?? '', donorAddress: (s.donor_address as string) ?? '', supplyItemId: s.supply_item_id as number, quantity: s.stock_in_quantity as number, time: s.stock_in_time as string, locationId: s.location_id as number })
-      }
+      const merged: DonationRow[] = ((srcRes.data ?? []) as DonationSource[]).map((s) => ({
+        source: s.source_type === 'donation' ? '捐贈' : '入庫',
+        donorName: s.donor_name.trim(),
+        donorContact: s.donor_contact ?? '',
+        donorAddress: s.donor_address ?? '',
+        donorDistrict: s.donor_district ?? '',
+        donorIdentity: s.donor_identity ?? '',
+        supplyItemId: s.supply_item_id,
+        quantity: s.quantity,
+        time: s.source_time,
+        locationId: s.location_id,
+      }))
 
       setDonations(merged)
       setOutbounds(((outRes.data ?? []) as OutboundRow[]).filter((o) => !o.is_cancelled))
@@ -131,7 +136,7 @@ export function DonorAnalysis() {
       const key = `${d.donorName}||${d.donorContact}`
       let g = map.get(key)
       if (!g) {
-        g = { key, donorName: d.donorName, donorContact: d.donorContact, donations: [], address: '', totalQuantity: 0, itemIds: [], issuedQuantity: 0, onHandQuantity: 0, flow: [] }
+        g = { key, donorName: d.donorName, donorContact: d.donorContact, donations: [], address: '', district: '', identity: '', totalQuantity: 0, itemIds: [], issuedQuantity: 0, onHandQuantity: 0, flow: [] }
         map.set(key, g)
       }
       g.donations.push(d)
@@ -159,8 +164,10 @@ export function DonorAnalysis() {
       }
       g.flow = [...recipMap.values()].sort((a, b) => b.quantity - a.quantity)
       g.donations.sort((a, b) => (a.time < b.time ? 1 : -1))
-      // 代表性地址：入庫來源紀錄中最近一筆有填的地址（捐贈紀錄本身沒有地址欄）。
+      // 代表性資料：入庫來源紀錄中最近一筆有填的（捐贈頁本身沒有這些欄位）。
       g.address = g.donations.find((d) => d.donorAddress.trim())?.donorAddress.trim() ?? ''
+      g.district = g.donations.find((d) => d.donorDistrict.trim())?.donorDistrict.trim() ?? ''
+      g.identity = g.donations.find((d) => d.donorIdentity.trim())?.donorIdentity.trim() ?? ''
     }
 
     return [...map.values()].sort((a, b) => b.totalQuantity - a.totalQuantity)
@@ -193,6 +200,8 @@ export function DonorAnalysis() {
       { header: '捐贈人', value: (g) => g.donorName },
       { header: '聯絡方式', value: (g) => g.donorContact || '' },
       { header: '聯絡地址', value: (g) => g.address || '' },
+      { header: '鄉鎮', value: (g) => g.district || '' },
+      { header: '身分別', value: (g) => (g.identity ? recipientIdentityDisplayName(g.identity) : '') },
       { header: '捐贈筆數', value: (g) => g.donations.length },
       { header: '捐贈件數', value: (g) => g.totalQuantity },
       { header: '不同物資', value: (g) => new Set(g.donations.map((d) => d.supplyItemId)).size },
@@ -327,6 +336,8 @@ export function DonorAnalysis() {
                             <div className="small text-muted mb-2">
                               <i className="bi bi-person-vcard" /> 聯絡方式：{g.donorContact || '未填'}
                               <span className="ms-3"><i className="bi bi-geo-alt" /> 聯絡地址：{g.address || '未填'}</span>
+                              <span className="ms-3"><i className="bi bi-pin-map" /> 鄉鎮：{g.district || '未填'}</span>
+                              <span className="ms-3"><i className="bi bi-award" /> 身分別：{g.identity ? recipientIdentityDisplayName(g.identity) : '未填'}</span>
                             </div>
                             <div className="row g-3 py-2">
                               {/* 捐贈明細 */}

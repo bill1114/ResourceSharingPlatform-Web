@@ -13,7 +13,8 @@ import { StockBatchPicker } from '../components/StockBatchPicker'
 import { FlashMessage } from '../components/FlashMessage'
 import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import { exportToExcel } from '../lib/excelExport'
-import type { SupplyItem, SupplyLocation, SupplyDonationLog } from '../types/db'
+import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
+import type { SupplyItem, SupplyLocation, DonationSource } from '../types/db'
 
 interface DonorSummaryRow {
   donor_name: string
@@ -272,24 +273,26 @@ export function SupplyDonationCreate() {
 }
 
 export function SupplyDonationIndex() {
-  const [logs, setLogs] = useState<SupplyDonationLog[]>([])
+  // 讀統一來源 donation_source_view：涵蓋物資捐贈 + 物資入庫(有捐贈人)。
+  const [logs, setLogs] = useState<DonationSource[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
   const [donorSummary, setDonorSummary] = useState<DonorSummaryRow[]>([])
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
+  const [sourceFilter, setSourceFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
       const [logRes, locRes, itemRes, summaryRes] = await Promise.all([
-        supabase.from('supply_donation_log').select('*').order('donation_time', { ascending: false }).limit(100),
+        supabase.from('donation_source_view').select('*').order('source_time', { ascending: false }).limit(200),
         supabase.from('supply_location').select('*'),
         supabase.from('supply_item').select('id, item_name, specification, unit'),
         supabase.from('donor_leaderboard_view').select('*').order('pickup_count', { ascending: false }),
       ])
-      setLogs((logRes.data ?? []) as SupplyDonationLog[])
+      setLogs((logRes.data ?? []) as DonationSource[])
       setLocations((locRes.data ?? []) as SupplyLocation[])
       setItems((itemRes.data ?? []) as SupplyItem[])
       setDonorSummary((summaryRes.data ?? []) as DonorSummaryRow[])
@@ -305,11 +308,13 @@ export function SupplyDonationIndex() {
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       if (locationFilter && log.location_id !== Number(locationFilter)) return false
+      if (sourceFilter && log.source_type !== sourceFilter) return false
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase()
         const matches =
           log.donor_name.toLowerCase().includes(k) ||
           (log.donor_contact ?? '').toLowerCase().includes(k) ||
+          (log.donor_address ?? '').toLowerCase().includes(k) ||
           (log.operator ?? '').toLowerCase().includes(k) ||
           (itemOf(log.supply_item_id)?.item_name ?? '').toLowerCase().includes(k)
         if (!matches) return false
@@ -317,22 +322,26 @@ export function SupplyDonationIndex() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logs, keyword, locationFilter, items])
+  }, [logs, keyword, locationFilter, sourceFilter, items])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
   }
 
   function handleExport() {
-    exportToExcel<SupplyDonationLog>('捐贈紀錄', '捐贈紀錄', [
-      { header: '捐贈時間', value: (l) => new Date(l.donation_time).toLocaleString('zh-TW') },
+    exportToExcel<DonationSource>('捐贈紀錄', '捐贈紀錄', [
+      { header: '時間', value: (l) => new Date(l.source_time).toLocaleString('zh-TW') },
+      { header: '來源', value: (l) => (l.source_type === 'donation' ? '捐贈' : '入庫') },
       { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
       { header: '據點', value: (l) => locationName(l.location_id) },
-      { header: '數量', value: (l) => l.donation_quantity },
+      { header: '數量', value: (l) => l.quantity },
       { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
       { header: '捐贈者', value: (l) => l.donor_name },
       { header: '聯絡方式', value: (l) => l.donor_contact ?? '' },
+      { header: '聯絡地址', value: (l) => l.donor_address ?? '' },
+      { header: '鄉鎮', value: (l) => l.donor_district ?? '' },
+      { header: '身分別', value: (l) => (l.donor_identity ? recipientIdentityDisplayName(l.donor_identity) : '') },
       { header: '操作人員', value: (l) => l.operator ?? '' },
     ], filteredLogs)
   }
@@ -360,14 +369,22 @@ export function SupplyDonationIndex() {
         </div>
         <div className="card-body">
           <div className="row g-3">
-            <div className="col-md-6">
+            <div className="col-md-5">
               <label className="form-label">關鍵字</label>
               <input
                 className="form-control"
-                placeholder="搜尋捐贈者姓名、聯絡方式或操作人員"
+                placeholder="搜尋捐贈者、聯絡方式、地址或操作人員"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label">來源</label>
+              <select className="form-select" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+                <option value="">全部</option>
+                <option value="donation">捐贈</option>
+                <option value="stock_in">入庫</option>
+              </select>
             </div>
             <div className="col-md-3">
               <label className="form-label">據點</label>
@@ -380,13 +397,14 @@ export function SupplyDonationIndex() {
                 ))}
               </select>
             </div>
-            <div className="col-md-3 d-flex align-items-end">
+            <div className="col-md-2 d-flex align-items-end">
               <button
                 type="button"
                 className="btn btn-secondary w-100"
                 onClick={() => {
                   setKeyword('')
                   setLocationFilter('')
+                  setSourceFilter('')
                 }}
               >
                 <i className="bi bi-arrow-clockwise" /> 重設
@@ -404,7 +422,8 @@ export function SupplyDonationIndex() {
                 <table className="table table-hover">
                   <thead className="table-light">
                     <tr>
-                      <th className="col-min">捐贈時間</th>
+                      <th className="col-min">時間</th>
+                      <th className="col-min">來源</th>
                       <th>物資名稱</th>
                       <th className="col-min">據點</th>
                       <th className="col-min">數量</th>
@@ -416,20 +435,25 @@ export function SupplyDonationIndex() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={7} className="text-center text-muted py-4">
+                        <td colSpan={8} className="text-center text-muted py-4">
                           載入中…
                         </td>
                       </tr>
                     ) : filteredLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center text-muted py-4">
+                        <td colSpan={8} className="text-center text-muted py-4">
                           沒有符合條件的捐贈紀錄
                         </td>
                       </tr>
                     ) : (
                       filteredLogs.map((log) => (
-                        <tr key={log.id}>
-                          <td className="col-min">{new Date(log.donation_time).toLocaleString('zh-TW')}</td>
+                        <tr key={`${log.source_type}-${log.id}`}>
+                          <td className="col-min">{new Date(log.source_time).toLocaleString('zh-TW')}</td>
+                          <td className="col-min">
+                            <span className={`badge ${log.source_type === 'donation' ? 'bg-info text-dark' : 'bg-success'}`}>
+                              {log.source_type === 'donation' ? '捐贈' : '入庫'}
+                            </span>
+                          </td>
                           <td>
                             <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
                             {itemOf(log.supply_item_id)?.specification ? (
@@ -442,9 +466,9 @@ export function SupplyDonationIndex() {
                             </span>
                           </td>
                           <td className="col-min">
-                            {log.donation_quantity} {itemOf(log.supply_item_id)?.unit ?? ''}
+                            {log.quantity} {itemOf(log.supply_item_id)?.unit ?? ''}
                           </td>
-                          <td>{log.donor_name}</td>
+                          <td>{log.donor_name}{log.donor_address ? <div className="small text-muted">{log.donor_address}</div> : null}</td>
                           <td>{log.donor_contact}</td>
                           <td className="col-min">{log.operator}</td>
                         </tr>

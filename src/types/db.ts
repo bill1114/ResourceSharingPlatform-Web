@@ -94,6 +94,24 @@ export interface SupplyDonationLog {
   remark: string | null
 }
 
+// donation_source_view：物資捐贈 + 物資入庫(有捐贈人) 的統一來源。
+export interface DonationSource {
+  source_type: 'donation' | 'stock_in'
+  id: number
+  supply_item_id: number
+  location_id: number
+  donor_name: string
+  donor_contact: string
+  donor_address: string | null
+  donor_precinct: string | null
+  donor_district: string | null
+  donor_identity: string | null
+  quantity: number
+  source_time: string
+  operator: string | null
+  remark: string | null
+}
+
 export interface SupplyStockInLog {
   id: number
   supply_item_id: number
