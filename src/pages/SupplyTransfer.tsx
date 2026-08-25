@@ -8,6 +8,7 @@ import { FlashMessage } from '../components/FlashMessage'
 import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import { OutboundItemPickerModal } from '../components/OutboundModals'
 import { expiryAlert } from '../lib/stockBatch'
+import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation, SupplyTransferLog, SupplyRequest } from '../types/db'
 
 // 轉移清單改為與出庫相同的概念：每一列存整個物資批次物件（顯示效期／規格／現有），
@@ -370,9 +371,27 @@ export function SupplyTransferIndex() {
     else { setMessage({ type: 'success', text: data.message }); await load() }
   }
   const locationName = (id: number) => locations.find((x) => x.id === id)?.location_name ?? `#${id}`
+  const itemOf = (id: number) => items.find((x) => x.id === id)
+
+  function handleExport() {
+    exportToExcel<SupplyTransferLog>('物資轉移紀錄', '轉移紀錄', [
+      { header: '轉移時間', value: (l) => new Date(l.transfer_time).toLocaleString('zh-TW') },
+      { header: '物資', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `#${l.supply_item_id}` },
+      { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
+      { header: '來源據點', value: (l) => locationName(l.from_location_id) },
+      { header: '目標據點', value: (l) => locationName(l.to_location_id) },
+      { header: '數量', value: (l) => l.transfer_quantity },
+      { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
+      { header: '狀態', value: (l) => transferStatusDisplayName(l.status) },
+      { header: '確認人', value: (l) => l.confirmed_by ?? '' },
+      { header: '確認時間', value: (l) => (l.confirmed_at ? new Date(l.confirmed_at).toLocaleString('zh-TW') : '') },
+      { header: '操作人員', value: (l) => l.operator ?? '' },
+      { header: '備註', value: (l) => l.remark ?? '' },
+    ], filtered)
+  }
 
   return <div className="container-fluid mt-4">
-    <div className="d-flex justify-content-between align-items-center mb-4"><h2><i className="bi bi-list-ul" /> 物資轉移紀錄</h2>{canCreate && <Link className="btn btn-primary" to="/transfers/create"><i className="bi bi-plus-circle" /> 新增轉移</Link>}</div>
+    <div className="d-flex justify-content-between align-items-center mb-4"><h2><i className="bi bi-list-ul" /> 物資轉移紀錄</h2><div className="d-flex gap-2"><button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}><i className="bi bi-file-earmark-excel" /> 匯出 Excel</button>{canCreate && <Link className="btn btn-primary" to="/transfers/create"><i className="bi bi-plus-circle" /> 新增轉移</Link>}</div></div>
     <FlashMessage />
     {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
     <div className="card shadow-sm mb-3"><div className="card-header bg-light"><i className="bi bi-funnel" /> 篩選條件</div><div className="card-body"><div className="row g-3">

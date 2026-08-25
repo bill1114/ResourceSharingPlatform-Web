@@ -16,6 +16,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
 import { AnalysisFilterModal } from '../components/AnalysisFilterModal'
+import { exportToExcel } from '../lib/excelExport'
 import {
   AllFilterFields,
   EMPTY_VALUE,
@@ -225,21 +226,43 @@ export function RecipientAnalysis() {
 
   const detailChoices = AllFilterFields.filter((f) => f !== primaryField)
 
+  // 匯出目前「篩選後」的樞紐結果（依畫面上的主軸／明細維度）。
+  function handleExport() {
+    exportToExcel<GroupRow>(
+      `領取分析_${FilterFieldLabels[primaryField]}`,
+      '領取分析',
+      [
+        { header: '排名', value: (g) => groups.indexOf(g) + 1 },
+        { header: FilterFieldLabels[primaryField], value: (g) => g.label },
+        { header: '領取次數', value: (g) => g.pickupCount },
+        { header: '領取件數', value: (g) => g.quantity },
+        { header: '領用人數', value: (g) => g.recipientCount },
+        { header: `${FilterFieldLabels[detailField]}分佈`, value: (g) => g.details.map((d) => `${d.label} ${d.quantity}`).join('、') },
+      ],
+      groups
+    )
+  }
+
   return (
     <div className="container-fluid mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="mb-0">
           <i className="bi bi-graph-up" /> 領取分析
         </h2>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setEditing(null)
-            setModalOpen(true)
-          }}
-        >
-          <i className="bi bi-funnel" /> 新增篩選條件
-        </button>
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-success" onClick={handleExport} disabled={groups.length === 0}>
+            <i className="bi bi-file-earmark-excel" /> 匯出 Excel
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setEditing(null)
+              setModalOpen(true)
+            }}
+          >
+            <i className="bi bi-funnel" /> 新增篩選條件
+          </button>
+        </div>
       </div>
 
       {/* ---------- 分析角度 ---------- */}
