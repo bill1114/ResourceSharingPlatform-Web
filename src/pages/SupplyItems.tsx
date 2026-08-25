@@ -50,6 +50,8 @@ export function SupplyItems() {
   const [items, setItems] = useState<SupplyItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [lowStock, setLowStock] = useState<LowStockData>(emptyLowStock)
+  // 總量不足（全系統）判斷用：global_low_stock_view 的 種類|名稱|規格 集合。
+  const [globalLowKeys, setGlobalLowKeys] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -116,6 +118,8 @@ export function SupplyItems() {
   const [locationFilter, setLocationFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [stockTypeFilter, setStockTypeFilter] = useState('')
+  // 狀態篩選：'' 全部 / lowStock 低庫存 / expiringSoon 即將即期 / globalLow 總量不足 / expired 已過期
+  const [statusFilter, setStatusFilter] = useState('')
   const [summaryOpen, setSummaryOpen] = useState(true)
 
   // 從戰情總覽「查看物資」帶入的據點篩選（?locationId=）
@@ -126,15 +130,23 @@ export function SupplyItems() {
 
   async function load() {
     setLoading(true)
-    const [itemsRes, locRes, low] = await Promise.all([
+    const [itemsRes, locRes, low, globalRes] = await Promise.all([
       supabase.from('supply_item').select('*').eq('is_active', true).order('id', { ascending: false }),
       supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
       fetchLowStock(),
+      supabase.from('global_low_stock_view').select('category, item_name, specification'),
     ])
     if (itemsRes.error) setError(itemsRes.error.message)
     setItems((itemsRes.data ?? []) as SupplyItem[])
     setLocations((locRes.data ?? []) as SupplyLocation[])
     setLowStock(low)
+    setGlobalLowKeys(
+      new Set(
+        ((globalRes.data ?? []) as { category: string; item_name: string; specification: string | null }[]).map(
+          (g) => `${g.category}|${g.item_name}|${g.specification ?? ''}`
+        )
+      )
+    )
     setLoading(false)
   }
 
@@ -144,11 +156,34 @@ export function SupplyItems() {
 
   const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category))).sort(), [items])
 
+  function isGlobalLow(i: SupplyItem): boolean {
+    return globalLowKeys.has(`${i.category}|${i.item_name}|${i.specification ?? ''}`)
+  }
+
+  function matchesStatus(i: SupplyItem): boolean {
+    if (!statusFilter) return true
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const in30Str = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+    switch (statusFilter) {
+      case 'lowStock':
+        return isItemLowStock(i, lowStock)
+      case 'expiringSoon':
+        return i.expiration_date != null && i.expiration_date >= todayStr && i.expiration_date <= in30Str
+      case 'globalLow':
+        return isGlobalLow(i)
+      case 'expired':
+        return i.expiration_date != null && i.expiration_date < todayStr
+      default:
+        return true
+    }
+  }
+
   const filteredItems = useMemo(() => {
     return items.filter((i) => {
       if (locationFilter && i.location_id !== Number(locationFilter)) return false
       if (categoryFilter && i.category !== categoryFilter) return false
       if (stockTypeFilter && i.stock_type !== stockTypeFilter) return false
+      if (!matchesStatus(i)) return false
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase()
         const matches =
@@ -160,7 +195,8 @@ export function SupplyItems() {
       }
       return true
     })
-  }, [items, keyword, locationFilter, categoryFilter, stockTypeFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, keyword, locationFilter, categoryFilter, stockTypeFilter, statusFilter, lowStock, globalLowKeys])
 
   // 依物資統計（跨據點加總）：對目前篩選結果依物資名稱分組
   const itemSummary = useMemo<ItemSummaryRow[]>(() => {
@@ -206,6 +242,7 @@ export function SupplyItems() {
     setLocationFilter('')
     setCategoryFilter('')
     setStockTypeFilter('')
+    setStatusFilter('')
   }
 
   function locationName(id: number): string {
@@ -277,6 +314,29 @@ export function SupplyItems() {
             {stockTypeDisplayName(st)}
           </button>
         ))}
+      </div>
+
+      {/* 狀態篩選：低庫存／即將即期／總量不足／已過期（可與上方分類、下方篩選並用） */}
+      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span className="text-muted small"><i className="bi bi-flag" /> 狀態</span>
+        <div className="btn-group btn-group-sm" role="group">
+          {[
+            { key: '', label: '全部' },
+            { key: 'lowStock', label: '低庫存' },
+            { key: 'expiringSoon', label: '即將即期' },
+            { key: 'globalLow', label: '總量不足' },
+            { key: 'expired', label: '已過期' },
+          ].map((s) => (
+            <button
+              key={s.key || 'all'}
+              type="button"
+              className={`btn ${statusFilter === s.key ? 'btn-dark' : 'btn-outline-dark'}`}
+              onClick={() => setStatusFilter(s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 篩選條件 */}

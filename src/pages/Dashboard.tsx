@@ -231,7 +231,7 @@ export function Dashboard() {
       <div className="row">
         <div className="col-12 mb-4">
           <div className="card shadow-sm">
-            <div className="card-header text-white" style={{ backgroundColor: statusColorMap.locationLowStock.bg }}>
+            <div className="card-header" style={{ backgroundColor: statusColorMap.locationLowStock.bg, color: statusColorMap.locationLowStock.text }}>
               <i className="bi bi-hand-index-thumb" /> 待處理需求（{requests.length}）
             </div>
             <div className="card-body">
