@@ -102,6 +102,10 @@ export function OutboundItemPickerModal({
   remainingOf,
   onCancel,
   onAdd,
+  title = '加入要派送的物資',
+  quantityLabel = '領用數量',
+  availableLabel = '可領數量',
+  emptyText = '這個據點沒有符合條件的可出庫物資',
 }: {
   /** 已由 useItemPicker 依「所選據點 + 有庫存」過濾過的物資 */
   items: SupplyItem[]
@@ -110,6 +114,11 @@ export function OutboundItemPickerModal({
   remainingOf: (item: SupplyItem) => number
   onCancel: () => void
   onAdd: (item: SupplyItem, quantity: number) => void
+  /** 標題／數量欄位／表頭／空清單文字可依情境覆寫（出庫、轉移共用）。 */
+  title?: string
+  quantityLabel?: string
+  availableLabel?: string
+  emptyText?: string
 }) {
   const [keyword, setKeyword] = useState('')
   const [stockType, setStockType] = useState('')
@@ -150,7 +159,7 @@ export function OutboundItemPickerModal({
         <div className="modal-content">
           <div className="modal-header">
             <h5 className="modal-title">
-              <i className="bi bi-box-seam" /> 加入要派送的物資
+              <i className="bi bi-box-seam" /> {title}
             </h5>
             <button type="button" className="btn-close" onClick={onCancel} />
           </div>
@@ -194,7 +203,7 @@ export function OutboundItemPickerModal({
                     <th style={{ width: 56 }} />
                     <th>物資</th>
                     <th className="col-min">規格／批次</th>
-                    <th className="col-min">可領數量</th>
+                    <th className="col-min">{availableLabel}</th>
                     <th className="col-min">效期</th>
                     <th />
                   </tr>
@@ -209,7 +218,7 @@ export function OutboundItemPickerModal({
                   ) : rows.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-center text-muted py-4">
-                        這個據點沒有符合條件的可出庫物資
+                        {emptyText}
                       </td>
                     </tr>
                   ) : (
@@ -284,7 +293,7 @@ export function OutboundItemPickerModal({
                   </div>
                   <div className="row g-2 align-items-end">
                     <div className="col-sm-4">
-                      <label className="form-label mb-1">領用數量 *</label>
+                      <label className="form-label mb-1">{quantityLabel} *</label>
                       <input
                         className="form-control"
                         type="number"

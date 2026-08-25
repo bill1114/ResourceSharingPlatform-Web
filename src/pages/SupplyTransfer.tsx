@@ -6,9 +6,13 @@ import { Roles, TransferStatuses, transferStatusBadgeClass, transferStatusDispla
 import { supabase } from '../lib/supabaseClient'
 import { FlashMessage } from '../components/FlashMessage'
 import { ConfirmActionModal } from '../components/ConfirmActionModal'
+import { OutboundItemPickerModal } from '../components/OutboundModals'
+import { expiryAlert } from '../lib/stockBatch'
 import type { SupplyItem, SupplyLocation, SupplyTransferLog, SupplyRequest } from '../types/db'
 
-type TransferLine = { key: number; supplyItemId: number | null; transferQuantity: string }
+// 轉移清單改為與出庫相同的概念：每一列存整個物資批次物件（顯示效期／規格／現有），
+// 由挑選視窗加入，數量可累加。
+type TransferLine = { item: SupplyItem; quantity: number }
 
 export function SupplyTransferCreate() {
   const { profile } = useAuth()
@@ -19,12 +23,14 @@ export function SupplyTransferCreate() {
   const [items, setItems] = useState<SupplyItem[]>([])
   const [fromLocationId, setFromLocationId] = useState<number | null>(profile?.location_id ?? null)
   const [toLocationId, setToLocationId] = useState<number | null>(null)
-  const [lines, setLines] = useState<TransferLine[]>([{ key: 1, supplyItemId: null, transferQuantity: '' }])
+  const [lines, setLines] = useState<TransferLine[]>([])
   const [remark, setRemark] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false) // 送出前確認視窗（p.13）
+  const [showItemModal, setShowItemModal] = useState(false)
+  const operatorName = profile?.display_name ?? profile?.username ?? ''
 
   useEffect(() => {
     Promise.all([
@@ -43,7 +49,7 @@ export function SupplyTransferCreate() {
     const target = items.find((x) => x.id === Number(id))
     if (!target) return
     setFromLocationId(target.location_id)
-    setLines([{ key: Date.now(), supplyItemId: target.id, transferQuantity: '' }])
+    setLines([{ item: target, quantity: 1 }])
   }, [searchParams, items])
 
   // 戰情總覽「待處理需求」的「轉移補貨」帶 ?requestId= 進來時：來源=需求指定的來源據點、
@@ -69,17 +75,39 @@ export function SupplyTransferCreate() {
             x.item_name === req.item_name &&
             (x.specification ?? '') === (req.specification ?? '')
         )
-        setLines([{ key: Date.now(), supplyItemId: match ? match.id : null, transferQuantity: String(req.quantity) }])
+        setLines(match ? [{ item: match, quantity: req.quantity }] : [])
       })
     return () => {
       cancelled = true
     }
   }, [searchParams, items])
 
-  const sourceItems = useMemo(() => items.filter((x) => x.location_id === fromLocationId), [items, fromLocationId])
+  const sourceItems = useMemo(() => items.filter((x) => x.location_id === fromLocationId && x.quantity > 0), [items, fromLocationId])
+  const totalQuantity = lines.reduce((sum, l) => sum + l.quantity, 0)
 
-  function updateLine(key: number, patch: Partial<TransferLine>) {
-    setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line))
+  // 扣掉清單裡已加入同批次的數量後，這個批次還剩多少可轉移。
+  function remainingOf(item: SupplyItem): number {
+    const used = lines.filter((l) => l.item.id === item.id).reduce((s, l) => s + l.quantity, 0)
+    return item.quantity - used
+  }
+
+  // 加入物資：同批次已在清單就累加數量，否則新增一列。
+  function addLine(item: SupplyItem, quantity: number) {
+    setLines((current) => {
+      const existing = current.find((l) => l.item.id === item.id)
+      if (existing) return current.map((l) => (l.item.id === item.id ? { ...l, quantity: Math.min(item.quantity, l.quantity + quantity) } : l))
+      return [...current, { item, quantity }]
+    })
+    setShowItemModal(false)
+  }
+
+  function updateLineQuantity(itemId: number, value: string) {
+    const n = Number(value)
+    setLines((current) => current.map((l) => (l.item.id === itemId ? { ...l, quantity: Number.isFinite(n) ? n : 0 } : l)))
+  }
+
+  function removeLine(itemId: number) {
+    setLines((current) => current.filter((l) => l.item.id !== itemId))
   }
 
   function locationName(id: number | null): string {
@@ -95,8 +123,12 @@ export function SupplyTransferCreate() {
       setError('請選擇不同的來源與目標據點')
       return
     }
-    if (lines.some((x) => !x.supplyItemId || Number(x.transferQuantity) <= 0)) {
-      setError('請完整選擇物資並輸入正確數量')
+    if (lines.length === 0) {
+      setError('請至少加入一項要轉移的物資')
+      return
+    }
+    if (lines.some((x) => x.quantity <= 0 || x.quantity > x.item.quantity)) {
+      setError('每一項的轉移數量必須大於 0 且不超過現有庫存')
       return
     }
     setConfirmOpen(true)
@@ -108,7 +140,7 @@ export function SupplyTransferCreate() {
       body: {
         fromLocationId,
         toLocationId,
-        lines: lines.map((x) => ({ supplyItemId: x.supplyItemId, transferQuantity: Number(x.transferQuantity) })),
+        lines: lines.map((x) => ({ supplyItemId: x.item.id, transferQuantity: x.quantity })),
         remark,
       },
     })
@@ -122,53 +154,143 @@ export function SupplyTransferCreate() {
   }
 
   return (
-    <div className="container mt-4">
-      <h2><i className="bi bi-arrow-left-right" /> 物資轉移</h2><hr />
+    <div className="container-fluid mt-4">
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <h2 className="mb-0"><i className="bi bi-arrow-left-right" /> 物資轉移</h2>
+        <Link className="btn btn-outline-secondary" to="/transfers"><i className="bi bi-list-ul" /> 轉移紀錄</Link>
+      </div>
+      <hr />
       {error && <div className="alert alert-danger">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
+
       <div className="row">
-        <div className="col-lg-9">
-          <div className="card shadow-sm"><div className="card-body">
-            <form onSubmit={submit}>
-              <div className="row">
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">來源據點 *</label>
-                  {isAdmin ? (
-                    <select className="form-select" required value={fromLocationId ?? ''} onChange={(e) => { setFromLocationId(e.target.value ? Number(e.target.value) : null); setLines([{ key: Date.now(), supplyItemId: null, transferQuantity: '' }]) }}>
-                      <option value="">請選擇來源據點</option>{locations.map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
+        <div className="col-lg-8">
+          <form onSubmit={submit}>
+            {/* 步驟一：來源與目標據點 */}
+            <div className="card shadow-sm mb-4">
+              <div className="card-header bg-light"><i className="bi bi-geo" /> 步驟一：來源與目標據點</div>
+              <div className="card-body">
+                <div className="row">
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">來源據點 *</label>
+                    {isAdmin ? (
+                      <select className="form-select" required value={fromLocationId ?? ''} onChange={(e) => { setFromLocationId(e.target.value ? Number(e.target.value) : null); setLines([]) }}>
+                        <option value="">請選擇來源據點</option>{locations.map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
+                      </select>
+                    ) : <input className="form-control" disabled value={locations.find((x) => x.id === fromLocationId)?.location_name ?? ''} />}
+                    {!isAdmin && <div className="form-text">已鎖定為你的所屬據點；只有最高權限管理人員能切換。</div>}
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">目標據點 *</label>
+                    <select className="form-select" required value={toLocationId ?? ''} onChange={(e) => setToLocationId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">請選擇目標據點</option>{locations.filter((x) => x.id !== fromLocationId).map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
                     </select>
-                  ) : <input className="form-control" disabled value={locations.find((x) => x.id === fromLocationId)?.location_name ?? ''} />}
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">目標據點 *</label>
-                  <select className="form-select" required value={toLocationId ?? ''} onChange={(e) => setToLocationId(e.target.value ? Number(e.target.value) : null)}>
-                    <option value="">請選擇目標據點</option>{locations.filter((x) => x.id !== fromLocationId).map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
-                  </select>
+                  </div>
                 </div>
               </div>
-              <label className="form-label">轉移物資 *</label>
-              <div className="table-responsive"><table className="table table-sm align-middle">
-                <thead><tr><th>#</th><th>物資／批次</th><th style={{ width: 180 }}>數量</th><th /></tr></thead>
-                <tbody>{lines.map((line, index) => <tr key={line.key}>
-                  <td>{index + 1}</td>
-                  <td><select className="form-select" required value={line.supplyItemId ?? ''} onChange={(e) => updateLine(line.key, { supplyItemId: e.target.value ? Number(e.target.value) : null })}>
-                    <option value="">請選擇物資</option>{sourceItems.map((x) => <option key={x.id} value={x.id}>{x.category}／{x.item_name}{x.specification ? `（${x.specification}）` : ''}－現有 {x.quantity} {x.unit}</option>)}
-                  </select></td>
-                  <td><input className="form-control" type="number" min={1} required value={line.transferQuantity} onChange={(e) => updateLine(line.key, { transferQuantity: e.target.value })} /></td>
-                  <td><button className="btn btn-outline-danger btn-sm" type="button" disabled={lines.length === 1} onClick={() => setLines((x) => x.filter((row) => row.key !== line.key))}><i className="bi bi-dash-circle" /></button></td>
-                </tr>)}</tbody>
-              </table></div>
-              <button className="btn btn-outline-primary btn-sm mb-3" type="button" onClick={() => setLines((x) => [...x, { key: Date.now(), supplyItemId: null, transferQuantity: '' }])}><i className="bi bi-plus-circle" /> 新增一項物資</button>
-              <div className="mb-3"><label className="form-label">備註</label><textarea className="form-control" rows={3} value={remark} onChange={(e) => setRemark(e.target.value)} /></div>
-              <button className="btn btn-primary btn-lg me-2" type="submit" disabled={submitting}>{submitting ? '建立中…' : '建立轉移'}</button>
-              <Link className="btn btn-secondary" to="/transfers">返回紀錄</Link>
-            </form>
-          </div></div>
+            </div>
+
+            {/* 步驟二：轉移清單（批次） */}
+            <div className="card shadow-sm mb-4">
+              <div className="card-header bg-light d-flex justify-content-between align-items-center">
+                <span><i className="bi bi-list-check" /> 步驟二：轉移清單</span>
+                <button type="button" className="btn btn-sm btn-primary" disabled={!fromLocationId} onClick={() => { setError(null); setShowItemModal(true) }}>
+                  <i className="bi bi-plus-circle" /> 新增物資
+                </button>
+              </div>
+              <div className="table-responsive">
+                <table className="table table-hover align-middle mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>物資</th>
+                      <th className="col-min">規格／批次</th>
+                      <th className="col-min">效期</th>
+                      <th className="col-min">現有庫存</th>
+                      <th className="col-min" style={{ width: 140 }}>轉移數量</th>
+                      <th className="col-min" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.length === 0 ? (
+                      <tr><td colSpan={6} className="text-center text-muted py-4">{fromLocationId ? '尚未加入任何物資，請按右上角「新增物資」' : '請先選擇來源據點'}</td></tr>
+                    ) : lines.map((l) => {
+                      const alert = expiryAlert(l.item)
+                      const over = l.quantity > l.item.quantity
+                      return (
+                        <tr key={l.item.id}>
+                          <td><strong>{l.item.item_name}</strong><div className="text-muted small">{l.item.category}</div></td>
+                          <td className="col-min">{l.item.specification?.trim() || '無'}</td>
+                          <td className="col-min">{l.item.expiration_date ?? '無效期'}{alert && <span className={`badge ms-1 ${alert.badgeClass}`}>{alert.label}</span>}</td>
+                          <td className="col-min">{l.item.quantity} {l.item.unit ?? ''}</td>
+                          <td className="col-min">
+                            <input className={`form-control form-control-sm ${over ? 'is-invalid' : ''}`} type="number" min={1} max={l.item.quantity} value={l.quantity} onChange={(e) => updateLineQuantity(l.item.id, e.target.value)} />
+                          </td>
+                          <td className="col-min text-end"><button type="button" className="btn btn-sm btn-outline-danger" title="移除" onClick={() => removeLine(l.item.id)}><i className="bi bi-trash" /></button></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  {lines.length > 0 && (
+                    <tfoot className="table-light"><tr><td colSpan={4} className="text-end fw-bold">合計</td><td className="fw-bold">{lines.length} 項／{totalQuantity} 件</td><td /></tr></tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+
+            {/* 操作人員 + 備註 + 送出 */}
+            <div className="card shadow-sm">
+              <div className="card-body">
+                <div className="mb-3">
+                  <label className="form-label">操作人員</label>
+                  <input className="form-control" disabled value={operatorName} />
+                  <div className="form-text">系統會自動記錄目前登入帳號為操作人員。</div>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">備註</label>
+                  <textarea className="form-control" rows={3} placeholder="轉移原因或其他說明（整批共用）" value={remark} onChange={(e) => setRemark(e.target.value)} />
+                </div>
+                <div className="d-flex gap-2">
+                  <button type="submit" className="btn btn-primary btn-lg" disabled={submitting || lines.length === 0}><i className="bi bi-check-circle" /> 建立轉移（{lines.length} 項）</button>
+                  <Link className="btn btn-secondary btn-lg" to="/transfers">← 返回紀錄</Link>
+                </div>
+              </div>
+            </div>
+          </form>
         </div>
-        <div className="col-lg-3">
-          <div className="alert alert-warning"><strong>到貨確認</strong><ul className="mb-0 mt-2"><li>建立時先扣除來源庫存</li><li>目標據點確認後才會入庫</li><li>取消會退回來源庫存</li></ul></div>
+
+        <div className="col-lg-4">
+          <div className="alert alert-info">
+            <strong><i className="bi bi-info-circle" /> 轉移說明</strong>
+            <ul className="mb-0 mt-2">
+              <li>先選來源與目標據點，再一項一項加入要轉移的批次</li>
+              <li>物資清單只會顯示來源據點的庫存；只有最高權限管理人員能切換來源</li>
+              <li>同一個批次重複加入會自動累加數量</li>
+            </ul>
+          </div>
+          <div className="alert alert-warning">
+            <strong><i className="bi bi-exclamation-triangle" /> 到貨確認</strong>
+            <ul className="mb-0 mt-2">
+              <li>建立時先扣除來源庫存</li>
+              <li>目標據點確認後才會入庫</li>
+              <li>取消會退回來源庫存</li>
+            </ul>
+          </div>
         </div>
       </div>
+
+      {showItemModal && (
+        <OutboundItemPickerModal
+          items={sourceItems}
+          loading={false}
+          remainingOf={remainingOf}
+          onCancel={() => setShowItemModal(false)}
+          onAdd={addLine}
+          title="加入要轉移的物資"
+          quantityLabel="轉移數量"
+          availableLabel="可轉移數量"
+          emptyText="這個據點沒有符合條件的可轉移物資"
+        />
+      )}
 
       {confirmOpen && (
         <ConfirmActionModal
@@ -183,22 +305,15 @@ export function SupplyTransferCreate() {
             { label: '目標據點', value: locationName(toLocationId) },
             ...(remark.trim() ? [{ label: '備註', value: remark.trim(), full: true }] : []),
           ]}
-          items={lines
-            .map((line) => {
-              const it = items.find((x) => x.id === line.supplyItemId)
-              if (!it) return null
-              const qty = Number(line.transferQuantity)
-              return {
-                name: it.item_name,
-                category: it.category,
-                spec: it.specification,
-                expiration: it.expiration_date,
-                quantity: qty,
-                unit: it.unit,
-                extra: `${it.quantity - qty} ${it.unit ?? ''}`,
-              }
-            })
-            .filter((x): x is NonNullable<typeof x> => x != null)}
+          items={lines.map((l) => ({
+            name: l.item.item_name,
+            category: l.item.category,
+            spec: l.item.specification,
+            expiration: l.item.expiration_date,
+            quantity: l.quantity,
+            unit: l.item.unit,
+            extra: `${l.item.quantity - l.quantity} ${l.item.unit ?? ''}`,
+          }))}
           extraHeader="轉移數量"
           extraColHeader="轉移後來源剩餘"
           warning={<>按下「確定轉移」後會<strong>立刻扣除來源據點庫存</strong>，待目標據點確認到貨後才入庫。請再確認一次品項與數量。</>}
