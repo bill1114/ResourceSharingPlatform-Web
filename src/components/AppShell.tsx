@@ -56,11 +56,6 @@ export function AppShell() {
                         <i className="bi bi-box-arrow-up" /> 物資出庫
                       </NavLink>
                     </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/donations/create">
-                        <i className="bi bi-gift" /> 物資捐贈
-                      </NavLink>
-                    </li>
                     {isAdminOrCadre && (
                       <li>
                         <NavLink className="dropdown-item" to="/disposals/create">

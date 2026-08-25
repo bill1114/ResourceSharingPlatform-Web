@@ -10,7 +10,7 @@ import { InventoryTypes } from './pages/InventoryTypes'
 import { Dashboard } from './pages/Dashboard'
 import { StatusList } from './pages/StatusList'
 import { SupplyOutboundCreate, SupplyOutboundIndex } from './pages/SupplyOutbound'
-import { SupplyDonationCreate, SupplyDonationIndex } from './pages/SupplyDonation'
+import { SupplyDonationIndex } from './pages/SupplyDonation'
 import { SupplyDisposalCreate, SupplyDisposalIndex } from './pages/SupplyDisposal'
 import { SupplyTransferCreate, SupplyTransferIndex } from './pages/SupplyTransfer'
 import { RecipientAnalysis } from './pages/RecipientAnalysis'
@@ -76,7 +76,6 @@ function App() {
         <Route path="/outbound" element={<SupplyOutboundIndex />} />
         <Route path="/outbound/recipient-analysis" element={<RecipientAnalysis />} />
         <Route path="/donations/donor-analysis" element={<DonorAnalysis />} />
-        <Route path="/donations/create" element={<SupplyDonationCreate />} />
         <Route path="/donations" element={<SupplyDonationIndex />} />
         <Route
           path="/disposals/create"

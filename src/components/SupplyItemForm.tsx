@@ -10,19 +10,15 @@ import { uploadItemPhoto } from '../lib/imageUpload'
 import { StockTypes, AllStockTypes, stockTypeDisplayName, Roles } from '../lib/enums'
 import { useAuth } from '../hooks/useAuth'
 import { ConfirmActionModal } from './ConfirmActionModal'
-import { DistrictPickerModal } from './OutboundModals'
-import { AllRecipientIdentities, recipientIdentityDisplayName } from '../lib/yunlinDistricts'
 import type { SupplyLocation, LocationInventorySafetyStock } from '../types/db'
 
 type FormState = {
   quantity: string; expirationDate: string; locationId: string; remark: string
   donorName: string; donorContact: string; donorAddress: string
-  donorPrecinct: string | null; donorDistrict: string | null; donorIdentity: string
 }
 const emptyForm: FormState = {
   quantity: '', expirationDate: '', locationId: '', remark: '',
   donorName: '', donorContact: '', donorAddress: '',
-  donorPrecinct: null, donorDistrict: null, donorIdentity: '',
 }
 
 export function SupplyItemForm({
@@ -44,7 +40,6 @@ export function SupplyItemForm({
   const [stockType, setStockType] = useState<string>(StockTypes.HasExpiry)
   // 送出前確認視窗（p.13）：先驗證再跳出核對，按「確認入庫」才真正寫入。
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [showDistrictModal, setShowDistrictModal] = useState(false)
 
   const catalog = useCascadingCatalog(stockType)
 
@@ -168,9 +163,6 @@ export function SupplyItemForm({
       donor_name: donorName || null,
       donor_contact: donorContact || null,
       donor_address: form.donorAddress.trim() || null,
-      donor_precinct: form.donorPrecinct,
-      donor_district: form.donorDistrict,
-      donor_identity: form.donorIdentity || null,
       operator: profile?.display_name ?? profile?.username ?? null,
       remark: form.remark.trim() || null,
     })
@@ -335,21 +327,6 @@ export function SupplyItemForm({
           />
         </div>
         <div className="col-md-12 mb-3"><label className="form-label">捐贈者地址</label><input className="form-control" placeholder="例如：雲林縣斗六市…（選填）" value={form.donorAddress} onChange={(e) => setForm({ ...form, donorAddress: e.target.value })} /></div>
-        <div className="col-md-6 mb-3">
-          <label className="form-label">所屬鄉鎮</label>
-          <div className="input-group">
-            <input className="form-control" readOnly placeholder="未選擇（選填）" value={form.donorDistrict ? `${form.donorDistrict}${form.donorPrecinct ? `（${form.donorPrecinct}）` : ''}` : ''} />
-            <button type="button" className="btn btn-outline-secondary" onClick={() => setShowDistrictModal(true)}>選擇</button>
-            {form.donorDistrict && <button type="button" className="btn btn-outline-secondary" onClick={() => setForm({ ...form, donorPrecinct: null, donorDistrict: null })} title="清除"><i className="bi bi-x" /></button>}
-          </div>
-        </div>
-        <div className="col-md-6 mb-3">
-          <label className="form-label">身分別</label>
-          <select className="form-select" value={form.donorIdentity} onChange={(e) => setForm({ ...form, donorIdentity: e.target.value })}>
-            <option value="">未選擇（選填）</option>
-            {AllRecipientIdentities.map((id) => <option key={id} value={id}>{recipientIdentityDisplayName(id)}</option>)}
-          </select>
-        </div>
       </div>
 
       <div className="mb-3">
@@ -383,8 +360,6 @@ export function SupplyItemForm({
           { label: '操作人員', value: profile?.display_name ?? profile?.username ?? '—' },
           { label: '捐贈人', value: form.donorName.trim() || <span className="text-muted">未填</span> },
           { label: '捐贈者電話', value: form.donorContact.trim() || <span className="text-muted">未填</span> },
-          ...(form.donorDistrict ? [{ label: '所屬鄉鎮', value: `${form.donorDistrict}${form.donorPrecinct ? `（${form.donorPrecinct}）` : ''}` }] : []),
-          ...(form.donorIdentity ? [{ label: '身分別', value: recipientIdentityDisplayName(form.donorIdentity) }] : []),
           ...(form.donorAddress.trim() ? [{ label: '捐贈者地址', value: form.donorAddress.trim(), full: true }] : []),
           ...(form.remark.trim() ? [{ label: '備註', value: form.remark.trim(), full: true }] : []),
         ]}
@@ -400,18 +375,6 @@ export function SupplyItemForm({
         ]}
         extraHeader="入庫數量"
         warning={<>按下「確認入庫」後會<strong>立刻建立庫存</strong>。請再確認一次上面的品項與數量。</>}
-      />
-    )}
-
-    {showDistrictModal && (
-      <DistrictPickerModal
-        currentPrecinct={form.donorPrecinct}
-        currentDistrict={form.donorDistrict}
-        onCancel={() => setShowDistrictModal(false)}
-        onSelect={(precinct, district) => {
-          setForm((f) => ({ ...f, donorPrecinct: precinct, donorDistrict: district }))
-          setShowDistrictModal(false)
-        }}
       />
     )}
     </>
