@@ -316,29 +316,6 @@ export function SupplyItems() {
         ))}
       </div>
 
-      {/* 狀態篩選：低庫存／即將即期／總量不足／已過期（可與上方分類、下方篩選並用） */}
-      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-        <span className="text-muted small"><i className="bi bi-flag" /> 狀態</span>
-        <div className="btn-group btn-group-sm" role="group">
-          {[
-            { key: '', label: '全部' },
-            { key: 'lowStock', label: '低庫存' },
-            { key: 'expiringSoon', label: '即將即期' },
-            { key: 'globalLow', label: '總量不足' },
-            { key: 'expired', label: '已過期' },
-          ].map((s) => (
-            <button
-              key={s.key || 'all'}
-              type="button"
-              className={`btn ${statusFilter === s.key ? 'btn-dark' : 'btn-outline-dark'}`}
-              onClick={() => setStatusFilter(s.key)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* 篩選條件 */}
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">
@@ -355,7 +332,17 @@ export function SupplyItems() {
                 onChange={(e) => setKeyword(e.target.value)}
               />
             </div>
-            <div className="col-md-3">
+            <div className="col-md-2">
+              <label className="form-label">狀態</label>
+              <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">全部狀態</option>
+                <option value="lowStock">低庫存</option>
+                <option value="expiringSoon">即將即期</option>
+                <option value="globalLow">總量不足</option>
+                <option value="expired">已過期</option>
+              </select>
+            </div>
+            <div className="col-md-2">
               <label className="form-label">據點</label>
               <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
                 <option value="">全部據點</option>
@@ -366,7 +353,7 @@ export function SupplyItems() {
                 ))}
               </select>
             </div>
-            <div className="col-md-3">
+            <div className="col-md-2">
               <label className="form-label">種類</label>
               <select className="form-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
                 <option value="">全部種類</option>
