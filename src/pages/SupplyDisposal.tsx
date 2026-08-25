@@ -13,6 +13,7 @@ import { Roles, AllDisposalReasons, disposalReasonDisplayName, disposalReasonBad
 import { ExpiringItemsPanel, StockBatchPicker } from '../components/StockBatchPicker'
 import { fetchExpiringItems, isExpired } from '../lib/stockBatch'
 import { FlashMessage } from '../components/FlashMessage'
+import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation, SupplyDisposalLog } from '../types/db'
 
@@ -33,6 +34,7 @@ export function SupplyDisposalCreate() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false) // 送出前確認視窗（p.13）
 
   const picker = useItemPicker(locationId, stockTypeFilter || undefined)
   const { items: pickerItems, setCategory, setItemName, setItemId } = picker
@@ -82,7 +84,12 @@ export function SupplyDisposalCreate() {
     picker.reset()
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function locationName(id: number | null): string {
+    if (id == null) return '—'
+    return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
+  }
+
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
     setSuccess(null)
@@ -100,7 +107,12 @@ export function SupplyDisposalCreate() {
       setError(`報廢數量超過現有庫存（現有 ${selected.quantity} ${selected.unit ?? ''}）`)
       return
     }
+    setConfirmOpen(true)
+  }
 
+  async function doDisposal() {
+    if (!locationId || !selected) return
+    const qty = Number(quantity)
     setSubmitting(true)
     const { data, error: invokeError } = await supabase.functions.invoke('disposal-create', {
       body: {
@@ -116,6 +128,7 @@ export function SupplyDisposalCreate() {
     // 失敗時要拿 Edge Function 自己的中文訊息：supabase-js 會把非 2xx 的內容
     // 換成 "non-2xx status code"，真正的原因藏在 response body 裡。
     if (invokeError || !data?.success) {
+      setConfirmOpen(false)
       setError(data?.message ?? (await functionErrorMessage(invokeError, '報廢失敗')))
       return
     }
@@ -240,6 +253,37 @@ export function SupplyDisposalCreate() {
           </div>
         </div>
       </div>
+
+      {confirmOpen && selected && (
+        <ConfirmActionModal
+          title="確認本次報廢內容"
+          icon="bi-trash3"
+          confirmLabel="確認報廢"
+          submitting={submitting}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => void doDisposal()}
+          fields={[
+            { label: '報廢原因', value: <span className={`badge ${disposalReasonBadgeClass(reason)}`}>{disposalReasonDisplayName(reason)}</span> },
+            { label: '所在據點', value: locationName(locationId) },
+            { label: '操作人員', value: operatorName || '—' },
+            ...(remark.trim() ? [{ label: '備註', value: remark.trim(), full: true }] : []),
+          ]}
+          items={[
+            {
+              name: selected.item_name,
+              category: selected.category,
+              spec: selected.specification,
+              expiration: selected.expiration_date,
+              quantity: Number(quantity),
+              unit: selected.unit,
+              extra: `${selected.quantity - Number(quantity)} ${selected.unit ?? ''}`,
+            },
+          ]}
+          extraHeader="報廢數量"
+          extraColHeader="報廢後剩餘"
+          warning={<>按下「確認報廢」後會<strong>立刻扣除庫存，且無法直接復原</strong>。請再確認一次品項與數量。</>}
+        />
+      )}
     </div>
   )
 }

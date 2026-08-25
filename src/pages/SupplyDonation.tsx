@@ -11,6 +11,7 @@ import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
 import { StockBatchPicker } from '../components/StockBatchPicker'
 import { FlashMessage } from '../components/FlashMessage'
+import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation, SupplyDonationLog } from '../types/db'
 
@@ -39,10 +40,16 @@ export function SupplyDonationCreate() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false) // 送出前確認視窗（p.13）
 
   const picker = useItemPicker(locationId, stockTypeFilter || undefined)
   const selected = picker.currentItem
   const operatorName = profile?.display_name ?? profile?.username ?? ''
+
+  function locationName(id: number | null): string {
+    if (id == null) return '—'
+    return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
+  }
 
   useEffect(() => {
     supabase
@@ -59,7 +66,7 @@ export function SupplyDonationCreate() {
     picker.reset()
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
     setSuccess(null)
@@ -73,7 +80,12 @@ export function SupplyDonationCreate() {
       setError('捐贈數量必須是大於 0 的整數')
       return
     }
+    setConfirmOpen(true)
+  }
 
+  async function doDonation() {
+    if (!locationId || !selected) return
+    const qty = Number(quantity)
     setSubmitting(true)
     const { data, error: invokeError } = await supabase.functions.invoke('donation-create', {
       body: {
@@ -90,6 +102,7 @@ export function SupplyDonationCreate() {
     // 失敗時要拿 Edge Function 自己的中文訊息：supabase-js 會把非 2xx 的內容
     // 換成 "non-2xx status code"，真正的原因藏在 response body 裡。
     if (invokeError || !data?.success) {
+      setConfirmOpen(false)
       setError(data?.message ?? (await functionErrorMessage(invokeError, '捐贈失敗')))
       return
     }
@@ -222,6 +235,38 @@ export function SupplyDonationCreate() {
           </div>
         </div>
       </div>
+
+      {confirmOpen && selected && (
+        <ConfirmActionModal
+          title="確認本次捐贈內容"
+          icon="bi-gift"
+          confirmLabel="確認捐贈"
+          submitting={submitting}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => void doDonation()}
+          fields={[
+            { label: '捐贈人', value: donorName.trim() || <span className="text-muted">未填</span> },
+            { label: '聯絡方式', value: donorContact.trim() || <span className="text-muted">未填</span> },
+            { label: '捐入據點', value: locationName(locationId) },
+            { label: '操作人員', value: operatorName || '—' },
+            ...(remark.trim() ? [{ label: '備註', value: remark.trim(), full: true }] : []),
+          ]}
+          items={[
+            {
+              name: selected.item_name,
+              category: selected.category,
+              spec: selected.specification,
+              expiration: selected.expiration_date,
+              quantity: Number(quantity),
+              unit: selected.unit,
+              extra: `${selected.quantity + Number(quantity)} ${selected.unit ?? ''}`,
+            },
+          ]}
+          extraHeader="捐贈數量"
+          extraColHeader="捐贈後庫存"
+          warning={<>按下「確認捐贈」後會<strong>立刻增加該批次庫存</strong>。請再確認一次品項與數量（右欄為捐贈後庫存）。</>}
+        />
+      )}
     </div>
   )
 }

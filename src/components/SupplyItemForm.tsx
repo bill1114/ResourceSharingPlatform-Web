@@ -9,6 +9,7 @@ import { useCascadingCatalog } from '../hooks/useCascadingCatalog'
 import { uploadItemPhoto } from '../lib/imageUpload'
 import { StockTypes, AllStockTypes, stockTypeDisplayName, Roles } from '../lib/enums'
 import { useAuth } from '../hooks/useAuth'
+import { ConfirmActionModal } from './ConfirmActionModal'
 import type { SupplyLocation, LocationInventorySafetyStock } from '../types/db'
 
 type FormState = { quantity: string; expirationDate: string; locationId: string; remark: string; donorName: string; donorContact: string; donorAddress: string }
@@ -31,6 +32,8 @@ export function SupplyItemForm({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [stockType, setStockType] = useState<string>(StockTypes.HasExpiry)
+  // 送出前確認視窗（p.13）：先驗證再跳出核對，按「確認入庫」才真正寫入。
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const catalog = useCascadingCatalog(stockType)
 
@@ -66,7 +69,7 @@ export function SupplyItemForm({
     catalog.reset()
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
 
@@ -82,7 +85,21 @@ export function SupplyItemForm({
       setError('有效期物資／冷凍食品必須填寫有效期限')
       return
     }
+    if (!form.quantity || Number(form.quantity) <= 0) {
+      setError('請輸入大於 0 的入庫數量')
+      return
+    }
+    // 驗證通過：跳出確認視窗，等使用者核對後才真的入庫。
+    setConfirmOpen(true)
+  }
 
+  function locationName(id: number): string {
+    return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
+  }
+
+  async function doStockIn() {
+    if (!catalog.currentDefinition) return
+    setError(null)
     setSaving(true)
 
     let imagePath: string | null = null
@@ -97,6 +114,7 @@ export function SupplyItemForm({
       if (uploadError) {
         setError(`圖片上傳失敗：${uploadError}`)
         setSaving(false)
+        setConfirmOpen(false)
         return
       }
       imagePath = path
@@ -127,6 +145,7 @@ export function SupplyItemForm({
     const result = await supabase.from('supply_item').insert(payload).select('id').single()
     if (result.error) {
       setSaving(false)
+      setConfirmOpen(false)
       setError(result.error.message)
       return
     }
@@ -143,17 +162,20 @@ export function SupplyItemForm({
     })
     if (stockInLogError) {
       setSaving(false)
+      setConfirmOpen(false)
       setError(`入庫已建立，但入庫來源紀錄寫入失敗：${stockInLogError.message}`)
       return
     }
 
     setSaving(false)
+    setConfirmOpen(false)
     const name = catalog.currentDefinition.item_name
     resetForm()
     onSaved?.(asDonation ? `「${name}」已入庫並記錄捐贈人` : `「${name}」已入庫，可稍後補登捐贈人資料`)
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit}>
       {error && <div className="alert alert-danger">{error}</div>}
 
@@ -318,5 +340,37 @@ export function SupplyItemForm({
         </button>
       </div>
     </form>
+
+    {confirmOpen && catalog.currentDefinition && (
+      <ConfirmActionModal
+        title="確認本次入庫內容"
+        icon="bi-box-arrow-in-down"
+        confirmLabel="確認入庫"
+        submitting={saving}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void doStockIn()}
+        fields={[
+          { label: '入庫據點', value: locationName(Number(form.locationId)) },
+          { label: '操作人員', value: profile?.display_name ?? profile?.username ?? '—' },
+          { label: '捐贈人', value: form.donorName.trim() || <span className="text-muted">未填</span> },
+          { label: '捐贈者電話', value: form.donorContact.trim() || <span className="text-muted">未填</span> },
+          ...(form.donorAddress.trim() ? [{ label: '捐贈者地址', value: form.donorAddress.trim(), full: true }] : []),
+          ...(form.remark.trim() ? [{ label: '備註', value: form.remark.trim(), full: true }] : []),
+        ]}
+        items={[
+          {
+            name: catalog.currentDefinition.item_name,
+            category: catalog.currentDefinition.category,
+            spec: catalog.currentVariant?.specification ?? null,
+            expiration: stockType === StockTypes.NoExpiry ? null : form.expirationDate,
+            quantity: Number(form.quantity),
+            unit: catalog.currentDefinition.unit,
+          },
+        ]}
+        extraHeader="入庫數量"
+        warning={<>按下「確認入庫」後會<strong>立刻建立庫存</strong>。請再確認一次上面的品項與數量。</>}
+      />
+    )}
+    </>
   )
 }

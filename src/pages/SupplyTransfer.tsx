@@ -5,6 +5,7 @@ import { locationColorStyle } from '../lib/colors'
 import { Roles, TransferStatuses, transferStatusBadgeClass, transferStatusDisplayName } from '../lib/enums'
 import { supabase } from '../lib/supabaseClient'
 import { FlashMessage } from '../components/FlashMessage'
+import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import type { SupplyItem, SupplyLocation, SupplyTransferLog, SupplyRequest } from '../types/db'
 
 type TransferLine = { key: number; supplyItemId: number | null; transferQuantity: string }
@@ -23,6 +24,7 @@ export function SupplyTransferCreate() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false) // 送出前確認視窗（p.13）
 
   useEffect(() => {
     Promise.all([
@@ -80,7 +82,12 @@ export function SupplyTransferCreate() {
     setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line))
   }
 
-  async function submit(e: FormEvent) {
+  function locationName(id: number | null): string {
+    if (id == null) return '—'
+    return locations.find((x) => x.id === id)?.location_name ?? `#${id}`
+  }
+
+  function submit(e: FormEvent) {
     e.preventDefault()
     setError(null)
     setSuccess(null)
@@ -92,6 +99,10 @@ export function SupplyTransferCreate() {
       setError('請完整選擇物資並輸入正確數量')
       return
     }
+    setConfirmOpen(true)
+  }
+
+  async function doTransfer() {
     setSubmitting(true)
     const { data, error: invokeError } = await supabase.functions.invoke('transfer-create', {
       body: {
@@ -103,6 +114,7 @@ export function SupplyTransferCreate() {
     })
     setSubmitting(false)
     if (invokeError || !data?.success) {
+      setConfirmOpen(false)
       setError(data?.message ?? invokeError?.message ?? '建立轉移失敗')
       return
     }
@@ -157,6 +169,41 @@ export function SupplyTransferCreate() {
           <div className="alert alert-warning"><strong>到貨確認</strong><ul className="mb-0 mt-2"><li>建立時先扣除來源庫存</li><li>目標據點確認後才會入庫</li><li>取消會退回來源庫存</li></ul></div>
         </div>
       </div>
+
+      {confirmOpen && (
+        <ConfirmActionModal
+          title="確認本次轉移內容"
+          icon="bi-arrow-left-right"
+          confirmLabel="確定轉移"
+          submitting={submitting}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => void doTransfer()}
+          fields={[
+            { label: '來源據點', value: locationName(fromLocationId) },
+            { label: '目標據點', value: locationName(toLocationId) },
+            ...(remark.trim() ? [{ label: '備註', value: remark.trim(), full: true }] : []),
+          ]}
+          items={lines
+            .map((line) => {
+              const it = items.find((x) => x.id === line.supplyItemId)
+              if (!it) return null
+              const qty = Number(line.transferQuantity)
+              return {
+                name: it.item_name,
+                category: it.category,
+                spec: it.specification,
+                expiration: it.expiration_date,
+                quantity: qty,
+                unit: it.unit,
+                extra: `${it.quantity - qty} ${it.unit ?? ''}`,
+              }
+            })
+            .filter((x): x is NonNullable<typeof x> => x != null)}
+          extraHeader="轉移數量"
+          extraColHeader="轉移後來源剩餘"
+          warning={<>按下「確定轉移」後會<strong>立刻扣除來源據點庫存</strong>，待目標據點確認到貨後才入庫。請再確認一次品項與數量。</>}
+        />
+      )}
     </div>
   )
 }
