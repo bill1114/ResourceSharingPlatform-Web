@@ -3,7 +3,7 @@
 // 已過期批次時會自動把原因設為「過期」。
 // 寫入走 disposal-create Edge Function；Index 只是一個受 RLS 限縮的 SELECT。
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
@@ -21,6 +21,7 @@ export function SupplyDisposalCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [locationId, setLocationId] = useState<number | null>(profile?.location_id ?? null)
@@ -77,6 +78,26 @@ export function SupplyDisposalCreate() {
     if (isExpired(item)) setReason(DisposalReasons.Expired)
     setQuantity(String(item.quantity))
   }
+
+  // 戰情總覽「已過期」清單的「報廢」帶 ?supplyItemId= 進來時：直接抓該批次並帶入
+  // （沿用 quickPick：設定據點、選取批次、過期自動帶原因、帶入現有數量）。
+  useEffect(() => {
+    const id = searchParams.get('supplyItemId')
+    if (!id) return
+    let cancelled = false
+    supabase
+      .from('supply_item')
+      .select('*')
+      .eq('id', Number(id))
+      .single()
+      .then(({ data }) => {
+        if (!cancelled && data) quickPick(data as SupplyItem)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // 切換分類後已選的物資可能不在範圍內，直接清空已選內容。
   function changeStockType(value: string) {

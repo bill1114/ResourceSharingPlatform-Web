@@ -9,7 +9,7 @@ import { locationColorStyle } from '../lib/colors'
 import { statusColorMap, type DashboardStatusKey } from '../lib/statusColors'
 import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
 import { itemPhotoUrl } from '../lib/imageUpload'
-import { stockTypeDisplayName, stockTypeBadgeClass } from '../lib/enums'
+import { stockTypeDisplayName, stockTypeBadgeClass, Roles } from '../lib/enums'
 import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
@@ -137,6 +137,7 @@ export function StatusList() {
 
   // 需求方＝登入帳號的據點（固定，不隨品項變）。管理員無據點時才需手選。
   const myLocId: number | null = profile?.location_id ?? null
+  const isAdminOrCadre = profile?.role_name === Roles.Admin || profile?.role_name === Roles.Cadre
   // 來源＝物資所在的據點（這列的據點，自動帶入）；總量不足（無所在據點）才需挑選。
   const isGlobalRow = raiseRow != null && raiseRow.locationId == null
   // 物資就在自己據點時無需向自己求援。
@@ -261,7 +262,22 @@ export function StatusList() {
                       <td>{r.quantity ?? '—'} {r.unit ?? ''}</td>
                       <td>{r.locationId == null ? <span className="badge bg-secondary">全系統</span> : <span className="badge" style={locationColorStyle(r.locationId)}>{locationName(r.locationId)}</span>}</td>
                       <td>{r.expiration ?? (r.stock_type ? <span className={`badge ${stockTypeBadgeClass(r.stock_type)}`}>{stockTypeDisplayName(r.stock_type)}</span> : r.note ?? '—')}</td>
-                      <td className="text-center"><button className="btn btn-sm btn-primary" onClick={() => openRaise(r)}><i className="bi bi-hand-index-thumb" /> 舉手</button></td>
+                      <td className="text-center">
+                        {status === 'expired' ? (
+                          // 已過期改成直接串接物資報廢（帶入該批次）；報廢限總管/據點管理人員。
+                          isAdminOrCadre && r.id != null ? (
+                            <Link className="btn btn-sm btn-dark" to={`/disposals/create?supplyItemId=${r.id}`}>
+                              <i className="bi bi-trash3" /> 報廢
+                            </Link>
+                          ) : (
+                            <span className="text-muted small">—</span>
+                          )
+                        ) : (
+                          <button className="btn btn-sm btn-primary" onClick={() => openRaise(r)}>
+                            <i className="bi bi-hand-index-thumb" /> 舉手
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   )
                 })}

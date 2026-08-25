@@ -61,11 +61,13 @@ export function AppShell() {
                         <i className="bi bi-gift" /> 物資捐贈
                       </NavLink>
                     </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/disposals/create">
-                        <i className="bi bi-trash3" /> 物資報廢
-                      </NavLink>
-                    </li>
+                    {isAdminOrCadre && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/disposals/create">
+                          <i className="bi bi-trash3" /> 物資報廢
+                        </NavLink>
+                      </li>
+                    )}
                     {isAdminOrCadre && (
                       <li>
                         <NavLink className="dropdown-item" to="/transfers/create">
