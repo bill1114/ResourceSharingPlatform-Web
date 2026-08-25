@@ -174,6 +174,7 @@ export function SupplyDisposalCreate() {
         title="即期／已過期物資，請確認是否需要報廢"
         actionLabel="選擇報廢"
         onPick={quickPick}
+        defaultCollapsed
       />
 
       {error && <div className="alert alert-danger">{error}</div>}
