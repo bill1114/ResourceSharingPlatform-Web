@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { statusColorMap, statusCardStyle, AllDashboardStatuses, type DashboardStatusKey } from '../lib/statusColors'
+import { fetchLowStock, isItemLowStock } from '../lib/lowStock'
 import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyLocation, SupplyRequest } from '../types/db'
 
@@ -50,7 +51,9 @@ interface LocationSummary {
 
 export function Dashboard() {
   const [locations, setLocations] = useState<SupplyLocation[]>([])
-  const [locationLowStock, setLocationLowStock] = useState<LowStockRow[]>([])
+  // 據點低庫存改為「數實際低庫存的物資批次」(與狀態清單、物資清單一致)，
+  // 不再數 location_low_stock_view 的門檻筆數(會含沒貨的、與清單對不起來)。
+  const [lowStockItemCount, setLowStockItemCount] = useState(0)
   const [globalLowStock, setGlobalLowStock] = useState<LowStockRow[]>([])
   const [expiringSoon, setExpiringSoon] = useState<ExpiringRow[]>([])
   const [expiredCount, setExpiredCount] = useState(0)
@@ -63,11 +66,11 @@ export function Dashboard() {
       const todayStr = new Date().toISOString().slice(0, 10)
       const in30Str = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
 
-      const [locRes, resolvedRes, allItemsRes, locLowRes, globalLowRes, expiringRes, expiredRes, reqRes] = await Promise.all([
+      const [locRes, resolvedRes, allItemsRes, low, globalLowRes, expiringRes, expiredRes, reqRes] = await Promise.all([
         supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
         supabase.from('supply_item_resolved').select('location_id, resolved_definition_id'),
-        supabase.from('supply_item').select('location_id, quantity').eq('is_active', true),
-        supabase.from('location_low_stock_view').select('*'),
+        supabase.from('supply_item').select('id, location_id, quantity').eq('is_active', true),
+        fetchLowStock(),
         supabase.from('global_low_stock_view').select('*'),
         supabase
           .from('supply_item')
@@ -86,11 +89,12 @@ export function Dashboard() {
 
       const locs = (locRes.data ?? []) as SupplyLocation[]
       const resolved = (resolvedRes.data ?? []) as ResolvedRow[]
-      const allItems = (allItemsRes.data ?? []) as { location_id: number; quantity: number }[]
-      const locLow = (locLowRes.data ?? []) as LowStockRow[]
+      const allItems = (allItemsRes.data ?? []) as { id: number; location_id: number; quantity: number }[]
+      // 實際低庫存的物資批次(與狀態清單同一套判斷)。
+      const lowItems = allItems.filter((it) => isItemLowStock(it, low))
 
       setLocations(locs)
-      setLocationLowStock(locLow)
+      setLowStockItemCount(lowItems.length)
       setGlobalLowStock((globalLowRes.data ?? []) as LowStockRow[])
       setExpiringSoon((expiringRes.data ?? []) as ExpiringRow[])
       setExpiredCount(expiredRes.count ?? 0)
@@ -104,7 +108,7 @@ export function Dashboard() {
             resolved.filter((r) => r.location_id === location.id && r.resolved_definition_id != null).map((r) => r.resolved_definition_id)
           ).size,
           totalQuantity: allItems.filter((i) => i.location_id === location.id).reduce((sum, i) => sum + i.quantity, 0),
-          lowStockCount: locLow.filter((r) => r.location_id === location.id).length,
+          lowStockCount: lowItems.filter((i) => i.location_id === location.id).length,
           expiringSoonCount: (expiringRes.data ?? []).filter((r) => (r as ExpiringRow).location_id === location.id).length,
         }))
       )
@@ -145,7 +149,7 @@ export function Dashboard() {
         {AllDashboardStatuses.map((key) => {
           const c = statusColorMap[key]
           const count: Record<DashboardStatusKey, number> = {
-            locationLowStock: locationLowStock.length,
+            locationLowStock: lowStockItemCount,
             globalLowStock: globalLowStock.length,
             expiringSoon: expiringSoon.length,
             expired: expiredCount,
