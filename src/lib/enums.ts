@@ -14,11 +14,11 @@ export const AllRoles: Role[] = [Roles.Admin, Roles.Cadre, Roles.SocialWorker]
 export function roleDisplayName(role: string | null | undefined): string {
   switch (role) {
     case Roles.Admin:
-      return '總管理人員'
+      return '總管'
     case Roles.Cadre:
-      return '據點管理人員'
+      return '幫主'
     case Roles.SocialWorker:
-      return '物資小天使'
+      return '物資小幫手'
     default:
       return role ?? ''
   }

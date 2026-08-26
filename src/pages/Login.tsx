@@ -39,7 +39,7 @@ export function Login() {
       <div className="card shadow-sm" style={{ width: '100%', maxWidth: 400 }}>
         <div className="card-body p-4">
           <h2 className="text-center mb-4">
-            <i className="bi bi-box-seam" /> 地方物資管理平台
+            <i className="bi bi-box-seam" /> 愛心轉運站
           </h2>
           {error && (
             <div className="alert alert-danger py-2" role="alert">

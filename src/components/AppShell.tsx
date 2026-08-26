@@ -24,7 +24,7 @@ export function AppShell() {
         <nav className="navbar navbar-expand-sm navbar-dark bg-primary border-bottom box-shadow mb-3">
           <div className="container-fluid">
             <NavLink className="navbar-brand" to="/">
-              <i className="bi bi-box-seam" /> 地方物資管理平台
+              <i className="bi bi-box-seam" /> 愛心轉運站
             </NavLink>
             <button
               className="navbar-toggler"
@@ -56,7 +56,7 @@ export function AppShell() {
                         <i className="bi bi-box-arrow-up" /> 物資領用
                       </NavLink>
                     </li>
-                    {isAdminOrCadre && (
+                    {isAdmin && (
                       <li>
                         <NavLink className="dropdown-item" to="/disposals/create">
                           <i className="bi bi-trash3" /> 物資報廢
@@ -70,11 +70,13 @@ export function AppShell() {
                         </NavLink>
                       </li>
                     )}
-                    <li>
-                      <NavLink className="dropdown-item" to="/ai-stockin/create">
-                        <i className="bi bi-stars" /> AI 智慧入庫
-                      </NavLink>
-                    </li>
+                    {isAdmin && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/ai-stockin/create">
+                          <i className="bi bi-stars" /> AI 智慧入庫
+                        </NavLink>
+                      </li>
+                    )}
                   </ul>
                 </li>
                 <li className="nav-item dropdown">
@@ -102,11 +104,13 @@ export function AppShell() {
                         <i className="bi bi-arrow-left-right" /> 轉移紀錄
                       </NavLink>
                     </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/ai-stockin">
-                        <i className="bi bi-stars" /> AI 辨識紀錄
-                      </NavLink>
-                    </li>
+                    {isAdmin && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/ai-stockin">
+                          <i className="bi bi-stars" /> AI 辨識紀錄
+                        </NavLink>
+                      </li>
+                    )}
                     <li><hr className="dropdown-divider" /></li>
                     <li>
                       <NavLink className="dropdown-item" to="/outbound/recipient-analysis">
@@ -198,7 +202,7 @@ export function AppShell() {
       <footer className="border-top footer text-muted mt-5 py-3 bg-light">
         <div className="container">
           <div className="row">
-            <div className="col-md-6">&copy; 2026 - 地方物資管理平台</div>
+            <div className="col-md-6">&copy; 2026 - 愛心轉運站</div>
             <div className="col-md-6 text-end">
               <i className="bi bi-info-circle" /> 用於管理地方據點物資現況、庫存數量、有效期限與轉移紀錄
             </div>
