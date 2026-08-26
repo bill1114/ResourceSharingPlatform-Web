@@ -1,4 +1,4 @@
-// 物資出庫（發放）— 改為「以領用人為主體的批次出庫」：
+// 物資領用（發放）— 改為「以領用人為主體的批次領用」：
 //   步驟一 領用人資料（姓名／聯絡方式／所屬鄉鎮／身分別）
 //   步驟二 發放據點（非管理人員鎖定自己的據點）
 //   步驟三 領用清單（可重複開彈窗加入多項物資，各自輸入數量）
@@ -119,7 +119,7 @@ export function SupplyOutboundCreate() {
     setLines((prev) => prev.filter((l) => l.item.id !== itemId))
   }
 
-  // 戰情總覽的「選擇出庫」帶 ?supplyItemId=&locationId= 進來。
+  // 戰情總覽的「選擇領用」帶 ?supplyItemId=&locationId= 進來。
   // locationId 只有管理人員採用；其他角色一律以自己的據點為準（RLS 也擋得住，
   // 但先在 UI 擋掉才不會出現空白選單這種看不懂的畫面）。
   useEffect(() => {
@@ -148,7 +148,7 @@ export function SupplyOutboundCreate() {
         return
       }
       if (lines.length > 0) {
-        setError('一次出庫只能發放同一個據點的物資；請先清空領用清單再切換據點')
+        setError('一次領用只能發放同一個據點的物資；請先清空領用清單再切換據點')
         return
       }
       setAdminLocationId(item.location_id)
@@ -168,11 +168,11 @@ export function SupplyOutboundCreate() {
 
   const totalQuantity = lines.reduce((sum, l) => sum + (Number.isFinite(l.quantity) ? l.quantity : 0), 0)
 
-  // 送出前的檢查抽出來，因為現在有兩個時機要用到：按「確認出庫」開確認視窗前，
-  // 以及確認視窗按下「確定出庫」時（視窗開著的期間清單其實動不了，但多一道
+  // 送出前的檢查抽出來，因為現在有兩個時機要用到：按「確認領用」開確認視窗前，
+  // 以及確認視窗按下「確定領用」時（視窗開著的期間清單其實動不了，但多一道
   // 保險比較不會在之後改版時漏掉）。回傳 null 代表通過。
   function validate(): string | null {
-    if (!effectiveLocationId) return isAdmin ? '請選擇發放據點' : '您的帳號尚未指定所屬據點，無法出庫'
+    if (!effectiveLocationId) return isAdmin ? '請選擇發放據點' : '您的帳號尚未指定所屬據點，無法領用'
     if (!recipientName.trim()) return '請輸入領用人姓名'
     if (!recipientDistrict) return '請選擇領用人所屬鄉鎮'
     if (!recipientIdentity) return '請選擇領用人身分別'
@@ -201,7 +201,7 @@ export function SupplyOutboundCreate() {
     setShowConfirmModal(true)
   }
 
-  // 確認視窗按下「確定出庫」才真的呼叫 Edge Function。
+  // 確認視窗按下「確定領用」才真的呼叫 Edge Function。
   async function doSubmit() {
     const problem = validate()
     if (problem) {
@@ -230,7 +230,7 @@ export function SupplyOutboundCreate() {
     // 失敗要把確認視窗關掉，否則錯誤訊息會被蓋在視窗後面看不到。
     if (invokeError || !data?.success) {
       setShowConfirmModal(false)
-      setError(data?.message ?? (await functionErrorMessage(invokeError, '出庫失敗')))
+      setError(data?.message ?? (await functionErrorMessage(invokeError, '領用失敗')))
       return
     }
     navigate('/outbound', { state: { flash: data.message } })
@@ -240,10 +240,10 @@ export function SupplyOutboundCreate() {
     <div className="container-fluid mt-4">
       <div className="d-flex justify-content-between align-items-center mb-2">
         <h2 className="mb-0">
-          <i className="bi bi-box-arrow-up" /> 物資出庫（發放）
+          <i className="bi bi-box-arrow-up" /> 物資領用（發放）
         </h2>
         <Link className="btn btn-outline-secondary" to="/outbound">
-          <i className="bi bi-list-ul" /> 出庫紀錄
+          <i className="bi bi-list-ul" /> 領用紀錄
         </Link>
       </div>
       <hr />
@@ -251,7 +251,7 @@ export function SupplyOutboundCreate() {
       <ExpiringItemsPanel
         items={expiringItems}
         locations={locations}
-        title="即期／已過期物資，建議優先出庫"
+        title="即期／已過期物資，建議優先領用"
         actionLabel="加入清單"
         onPick={quickPick}
       />
@@ -323,7 +323,7 @@ export function SupplyOutboundCreate() {
                         </button>
                       )}
                     </div>
-                    <div className="form-text">先選分局區，再選該分局負責的鄉鎮市（雲林縣）。</div>
+                    <div className="form-text">直接點選鄉鎮市（依分區列出，雲林縣）。</div>
                   </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label d-block">身分別 *</label>
@@ -501,7 +501,7 @@ export function SupplyOutboundCreate() {
 
                 <div className="d-flex gap-2">
                   <button type="submit" className="btn btn-primary btn-lg" disabled={submitting || lines.length === 0}>
-                    <i className="bi bi-check-circle" /> 確認出庫（{lines.length} 項）
+                    <i className="bi bi-check-circle" /> 確認領用（{lines.length} 項）
                   </button>
                   <Link className="btn btn-secondary btn-lg" to="/outbound">
                     ← 返回紀錄
@@ -515,7 +515,7 @@ export function SupplyOutboundCreate() {
         <div className="col-lg-4">
           <div className="alert alert-info">
             <strong>
-              <i className="bi bi-info-circle" /> 出庫說明
+              <i className="bi bi-info-circle" /> 領用說明
             </strong>
             <ul className="mb-0 mt-2">
               <li>以領用人為主體：先填人的資料，再一項一項加入要派送的物資</li>
@@ -529,8 +529,8 @@ export function SupplyOutboundCreate() {
               <i className="bi bi-exclamation-triangle" /> 注意事項
             </strong>
             <ul className="mb-0 mt-2">
-              <li>請確認每一項的出庫數量正確</li>
-              <li>出庫後無法直接復原</li>
+              <li>請確認每一項的領用數量正確</li>
+              <li>領用後無法直接復原</li>
               <li>建議填寫領用人聯絡方式以利後續追蹤</li>
             </ul>
           </div>
@@ -592,7 +592,7 @@ export function SupplyOutboundIndex() {
   const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'cancelled'>('')
   const [itemFilter, setItemFilter] = useState('')
   const [loading, setLoading] = useState(true)
-  // 取消出庫
+  // 取消領用
   const [cancelTarget, setCancelTarget] = useState<SupplyOutboundLog | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'danger'; text: string } | null>(null)
@@ -697,21 +697,21 @@ export function SupplyOutboundIndex() {
   }
 
   function handleExport() {
-    exportToExcel<SupplyOutboundLog>('出庫紀錄', '出庫紀錄', [
-      { header: '出庫時間', value: (l) => new Date(l.outbound_time).toLocaleString('zh-TW') },
+    exportToExcel<SupplyOutboundLog>('領用紀錄', '領用紀錄', [
+      { header: '領用時間', value: (l) => new Date(l.outbound_time).toLocaleString('zh-TW') },
       { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
       { header: '來源據點', value: (l) => locationName(l.location_id) },
-      { header: '出庫數量', value: (l) => l.outbound_quantity },
+      { header: '領用數量', value: (l) => l.outbound_quantity },
       { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
       { header: '領用人', value: (l) => l.recipient_name },
       { header: '聯絡方式', value: (l) => l.recipient_contact ?? '' },
-      { header: '分局區', value: (l) => l.recipient_precinct ?? '' },
+      { header: '區', value: (l) => l.recipient_precinct ?? '' },
       { header: '所屬鄉鎮', value: (l) => l.recipient_district ?? '' },
       { header: '身分別', value: (l) => recipientIdentityDisplayName(l.recipient_identity) },
       { header: '操作人員', value: (l) => l.operator ?? '' },
       { header: '備註', value: (l) => l.remark ?? '' },
-      { header: '狀態', value: (l) => (l.is_cancelled ? '已取消' : '已出庫') },
+      { header: '狀態', value: (l) => (l.is_cancelled ? '已取消' : '已領用') },
       { header: '取消時間', value: (l) => (l.cancelled_at ? new Date(l.cancelled_at).toLocaleString('zh-TW') : '') },
       { header: '取消人員', value: (l) => l.cancelled_by ?? '' },
       { header: '取消原因', value: (l) => l.cancel_reason ?? '' },
@@ -722,7 +722,7 @@ export function SupplyOutboundIndex() {
     <div className="container-fluid mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="mb-0">
-          <i className="bi bi-list-ul" /> 物資出庫紀錄
+          <i className="bi bi-list-ul" /> 物資領用紀錄
         </h2>
         <div className="d-flex gap-2">
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
@@ -732,7 +732,7 @@ export function SupplyOutboundIndex() {
             <i className="bi bi-graph-up" /> 查看領取分析
           </Link>
           <Link className="btn btn-primary" to="/outbound/create">
-            <i className="bi bi-plus-circle" /> 新增出庫
+            <i className="bi bi-plus-circle" /> 新增領用
           </Link>
         </div>
       </div>
@@ -790,7 +790,7 @@ export function SupplyOutboundIndex() {
                 onChange={(e) => setStatusFilter(e.target.value as '' | 'active' | 'cancelled')}
               >
                 <option value="">全部狀態</option>
-                <option value="active">已出庫</option>
+                <option value="active">已領用</option>
                 <option value="cancelled">已取消</option>
               </select>
             </div>
@@ -818,10 +818,10 @@ export function SupplyOutboundIndex() {
             <table className="table table-hover">
               <thead className="table-light">
                 <tr>
-                  <th className="col-min">出庫時間</th>
+                  <th className="col-min">領用時間</th>
                   <th>物資名稱</th>
                   <th className="col-min">來源據點</th>
-                  <th className="col-min">出庫數量</th>
+                  <th className="col-min">領用數量</th>
                   <th>領用人</th>
                   <th>聯絡方式</th>
                   <th className="col-min">所屬鄉鎮</th>
@@ -842,7 +842,7 @@ export function SupplyOutboundIndex() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={12} className="text-center text-muted py-4">
-                      沒有符合條件的出庫紀錄
+                      沒有符合條件的領用紀錄
                     </td>
                   </tr>
                 ) : (
@@ -856,7 +856,7 @@ export function SupplyOutboundIndex() {
                           <span className="text-muted"> ／{itemOf(log.supply_item_id)?.specification}</span>
                         ) : null}
                         {log.batch_id && (
-                          <span className="badge bg-light text-dark border ms-1" title="同一次批次出庫">
+                          <span className="badge bg-light text-dark border ms-1" title="同一次批次領用">
                             <i className="bi bi-collection" /> 批次
                           </span>
                         )}
@@ -900,7 +900,7 @@ export function SupplyOutboundIndex() {
                             {log.cancel_reason && <div className="small fst-italic">{log.cancel_reason}</div>}
                           </>
                         ) : (
-                          <span className="badge bg-success">已出庫</span>
+                          <span className="badge bg-success">已領用</span>
                         )}
                       </td>
                       <td className="col-min">

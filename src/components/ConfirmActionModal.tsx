@@ -1,5 +1,5 @@
 // 通用「送出前確認」視窗（分工單 p.13）。
-// 版型比照出庫的「確認本次出庫內容」（OutboundModals.tsx）：上方是本次操作的
+// 版型比照領用的「確認本次領用內容」（OutboundModals.tsx）：上方是本次操作的
 // 重點欄位（據點、操作人員…），中間是品項清單（品項／規格／效期／數量），
 // 下方黃色提醒 + 返回修改／確定。入庫、捐贈、報廢、轉移等「一按就異動庫存」的
 // 操作都套這個元件，讓使用者送出前先核對品項、數量、內容。
@@ -23,7 +23,7 @@ export interface ConfirmItem {
   unit?: string | null
   /** 效期旁的小標籤，例如「已過期」「即期」。 */
   badge?: { label: string; className: string } | null
-  /** 數量右側附註，例如出庫後剩餘。 */
+  /** 數量右側附註，例如領用後剩餘。 */
   extra?: ReactNode
 }
 
@@ -33,7 +33,7 @@ export function ConfirmActionModal({
   fields,
   items,
   extraHeader,
-  extraColHeader = '出庫後剩餘',
+  extraColHeader = '領用後剩餘',
   warning,
   confirmLabel,
   submitting,
@@ -44,9 +44,9 @@ export function ConfirmActionModal({
   icon?: string
   fields: ConfirmField[]
   items: ConfirmItem[]
-  /** 品項數量欄的表頭（出庫叫「出庫數量」、入庫叫「入庫數量」…）。 */
+  /** 品項數量欄的表頭（領用叫「領用數量」、入庫叫「入庫數量」…）。 */
   extraHeader?: string
-  /** 「extra」附註欄的表頭（出庫後剩餘／捐贈後庫存…）。 */
+  /** 「extra」附註欄的表頭（領用後剩餘／捐贈後庫存…）。 */
   extraColHeader?: string
   warning: ReactNode
   confirmLabel: string

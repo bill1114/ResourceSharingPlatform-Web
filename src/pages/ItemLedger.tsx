@@ -1,10 +1,10 @@
 // 物資明細（總管專用）—「一列一筆異動」的完整明細表。
-// 每筆物資從入庫開始，後續的 捐贈／出庫／報廢／轉移／調整 都各自攤成一列，
+// 每筆物資從入庫開始，後續的 捐贈／領用／報廢／轉移／調整 都各自攤成一列，
 // 顯示 類型／增減數量／說明。可用 關鍵字、據點、類型 篩選；匯出全部（右上角）。
 // 操作：
 //   調整 = 盤點修正該批次目前數量（走 stock_adjust RPC，留一筆「調整」）。
 //   刪除 = 只對「調整」列開放，回算庫存（走 stock_adjust_delete RPC）。
-// 出庫／報廢／轉移不在這裡刪，請走各自的回庫／取消流程。
+// 領用／報廢／轉移不在這裡刪，請走各自的回庫／取消流程。
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
@@ -24,7 +24,7 @@ interface LedgerItem {
   remark: string | null
 }
 
-type LedgerType = '入庫' | '捐贈' | '出庫' | '報廢' | '轉移' | '調整'
+type LedgerType = '入庫' | '捐贈' | '領用' | '報廢' | '轉移' | '調整'
 
 interface LedgerEntry {
   key: string
@@ -46,12 +46,12 @@ interface LedgerEntry {
 const typeBadge: Record<LedgerType, string> = {
   入庫: 'bg-success',
   捐贈: 'bg-info text-dark',
-  出庫: 'bg-primary',
+  領用: 'bg-primary',
   報廢: 'bg-dark',
   轉移: 'bg-warning text-dark',
   調整: 'bg-secondary',
 }
-const AllTypes: LedgerType[] = ['入庫', '捐贈', '出庫', '報廢', '轉移', '調整']
+const AllTypes: LedgerType[] = ['入庫', '捐贈', '領用', '報廢', '轉移', '調整']
 
 export function ItemLedger() {
   const [entries, setEntries] = useState<LedgerEntry[]>([])
@@ -129,7 +129,7 @@ export function ItemLedger() {
     for (const o of (outRes.data ?? []) as Record<string, unknown>[]) {
       const it = itemById.get(o.supply_item_id as number); if (!it) continue
       const cancelled = o.is_cancelled === true
-      list.push({ ...base(it), key: `out-${it.id}-${o.outbound_time}`, time: o.outbound_time as string, type: '出庫', delta: cancelled ? 0 : -(o.outbound_quantity as number), detail: `發放給 ${o.recipient_name ?? '—'}${cancelled ? `（已取消回庫 ${o.outbound_quantity}）` : ''}`, operator: (o.operator as string) ?? null })
+      list.push({ ...base(it), key: `out-${it.id}-${o.outbound_time}`, time: o.outbound_time as string, type: '領用', delta: cancelled ? 0 : -(o.outbound_quantity as number), detail: `發放給 ${o.recipient_name ?? '—'}${cancelled ? `（已取消回庫 ${o.outbound_quantity}）` : ''}`, operator: (o.operator as string) ?? null })
     }
     for (const d of (disRes.data ?? []) as Record<string, unknown>[]) {
       const it = itemById.get(d.supply_item_id as number); if (!it) continue
@@ -235,7 +235,7 @@ export function ItemLedger() {
           <i className="bi bi-file-earmark-excel" /> 匯出 Excel
         </button>
       </div>
-      <p className="text-muted">每一筆物資從入庫到後續 出庫／捐贈／報廢／轉移／調整 的完整異動歷程（總管專用）。</p>
+      <p className="text-muted">每一筆物資從入庫到後續 領用／捐贈／報廢／轉移／調整 的完整異動歷程（總管專用）。</p>
       <FlashMessage />
       {error && <div className="alert alert-danger">{error}</div>}
 

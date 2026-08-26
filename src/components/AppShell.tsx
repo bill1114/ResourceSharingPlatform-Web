@@ -53,7 +53,7 @@ export function AppShell() {
                     </li>
                     <li>
                       <NavLink className="dropdown-item" to="/outbound/create">
-                        <i className="bi bi-box-arrow-up" /> 物資出庫
+                        <i className="bi bi-box-arrow-up" /> 物資領用
                       </NavLink>
                     </li>
                     {isAdminOrCadre && (
@@ -84,7 +84,7 @@ export function AppShell() {
                   <ul className="dropdown-menu">
                     <li>
                       <NavLink className="dropdown-item" to="/outbound">
-                        <i className="bi bi-box-arrow-up" /> 出庫紀錄
+                        <i className="bi bi-box-arrow-up" /> 領用紀錄
                       </NavLink>
                     </li>
                     <li>

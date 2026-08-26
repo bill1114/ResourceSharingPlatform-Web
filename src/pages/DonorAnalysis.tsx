@@ -224,7 +224,7 @@ export function DonorAnalysis() {
 
       <div className="alert alert-light border small">
         <i className="bi bi-info-circle" /> 「物流追蹤」為<strong>批次層級</strong>的近似：呈現這位捐贈人貢獻過的批次後續發放給哪些領用人。
-        由於一個批次可能混入多位捐贈人、出庫採先進先出，並非精確的一對一歸屬。
+        由於一個批次可能混入多位捐贈人、領用採先進先出，並非精確的一對一歸屬。
       </div>
 
       {/* 統計卡 */}
