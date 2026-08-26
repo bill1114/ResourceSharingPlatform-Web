@@ -311,11 +311,11 @@ export function SupplyOutboundCreate() {
                   <div className="card-body">
                     <div className="row">
                       <div className="col-md-6 mb-3">
-                        <label className="form-label">使用人名稱 *</label>
+                        <label className="form-label">領用人姓名 *</label>
                         <input className="form-control" maxLength={50} placeholder="例如：陳先生" value={r.name} onChange={(e) => patchRecipient(r.key, { name: e.target.value })} />
                       </div>
                       <div className="col-md-6 mb-3">
-                        <label className="form-label">使用人聯絡方式</label>
+                        <label className="form-label">領用人電話</label>
                         <input className="form-control" maxLength={50} placeholder="例如：手機或地址" value={r.contact} onChange={(e) => patchRecipient(r.key, { contact: e.target.value })} />
                       </div>
                       <div className="col-md-6 mb-3">
@@ -1003,7 +1003,7 @@ export function SupplyOutboundIndex() {
                       <input className="form-control" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                     </div>
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">聯絡方式</label>
+                      <label className="form-label">領用人電話</label>
                       <input className="form-control" value={editForm.contact} onChange={(e) => setEditForm({ ...editForm, contact: e.target.value })} />
                     </div>
                     <div className="col-md-6 mb-3">
