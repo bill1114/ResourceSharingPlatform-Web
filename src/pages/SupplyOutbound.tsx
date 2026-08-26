@@ -530,6 +530,8 @@ export function SupplyOutboundIndex() {
   const [cancelTarget, setCancelTarget] = useState<SupplyOutboundLog | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'danger'; text: string } | null>(null)
+  // 查看詳情（整批領用單）
+  const [detailTarget, setDetailTarget] = useState<SupplyOutboundLog | null>(null)
   // 修改領用
   const [editTarget, setEditTarget] = useState<SupplyOutboundLog | null>(null)
   const [editForm, setEditForm] = useState({ supplyItemId: 0, quantity: '', name: '', contact: '', precinct: null as string | null, district: null as string | null, identity: '', remark: '' })
@@ -662,6 +664,68 @@ export function SupplyOutboundIndex() {
     setEditTarget(null)
     setMessage({ type: 'success', text: '領用紀錄已更新，庫存已回算' })
     await load()
+  }
+
+  // 同一批（同 batch_id）的所有品項；沒有 batch_id 就只有自己一筆。已取消的不列入單據。
+  function batchOf(log: SupplyOutboundLog): SupplyOutboundLog[] {
+    if (!log.batch_id) return [log]
+    return logs.filter((l) => l.batch_id === log.batch_id && !l.is_cancelled)
+  }
+
+  // 列印「領用單／簽收單」：用隱藏 iframe 寫入乾淨 HTML 再列印（避開彈窗攔截與 App 樣式）。
+  function printReceipt(log: SupplyOutboundLog) {
+    const rows = batchOf(log)
+    const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as Record<string, string>)[c]))
+    const totalQty = rows.reduce((s, l) => s + l.outbound_quantity, 0)
+    const itemRows = rows
+      .map((l, i) => {
+        const it = itemOf(l.supply_item_id)
+        return `<tr><td>${i + 1}</td><td>${esc(it?.item_name ?? '物資 #' + l.supply_item_id)}</td><td>${esc(it?.specification ?? '無')}</td><td style="text-align:right">${l.outbound_quantity} ${esc(it?.unit ?? '')}</td></tr>`
+      })
+      .join('')
+    const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>領用單</title>
+<style>
+*{font-family:"Microsoft JhengHei","PingFang TC","Heiti TC",sans-serif;box-sizing:border-box}
+body{padding:24px;color:#000}
+h1{text-align:center;font-size:22px;margin:0 0 4px}
+.sub{text-align:center;color:#555;margin:0 0 16px;font-size:12px}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+.meta td{padding:4px 6px;font-size:14px;vertical-align:top}
+.items th,.items td{border:1px solid #333;padding:6px 8px;font-size:14px}
+.items th{background:#f0f0f0}
+.sign{margin-top:48px;display:flex;justify-content:space-between;font-size:14px}
+.sign div{width:45%;border-top:1px solid #333;padding-top:6px;text-align:center;color:#333}
+@media print{body{padding:0}}
+</style></head><body>
+<h1>愛心轉運站 · 物資領用單</h1>
+<p class="sub">領用單號：${esc(log.batch_id ?? '#' + log.id)}　列印時間：${esc(new Date().toLocaleString('zh-TW'))}</p>
+<table class="meta">
+<tr><td width="15%"><b>領用時間</b></td><td width="35%">${esc(new Date(log.outbound_time).toLocaleString('zh-TW'))}</td><td width="15%"><b>發放據點</b></td><td>${esc(locationName(log.location_id))}</td></tr>
+<tr><td><b>領用人</b></td><td>${esc(log.recipient_name)}</td><td><b>聯絡方式</b></td><td>${esc(log.recipient_contact ?? '')}</td></tr>
+<tr><td><b>所屬鄉鎮</b></td><td>${esc((log.recipient_precinct ? log.recipient_precinct + ' / ' : '') + (log.recipient_district ?? ''))}</td><td><b>身分別</b></td><td>${esc(recipientIdentityDisplayName(log.recipient_identity))}</td></tr>
+<tr><td><b>操作人員</b></td><td>${esc(log.operator ?? '')}</td><td><b>備註</b></td><td>${esc(log.remark ?? '')}</td></tr>
+</table>
+<table class="items"><thead><tr><th style="width:40px">#</th><th>物資</th><th style="width:130px">規格</th><th style="width:120px;text-align:right">數量</th></tr></thead>
+<tbody>${itemRows}</tbody>
+<tfoot><tr><th colspan="3" style="text-align:right">合計</th><th style="text-align:right">${rows.length} 項 / ${totalQty} 件</th></tr></tfoot></table>
+<div class="sign"><div>領用人簽名</div><div>經辦人簽名</div></div>
+</body></html>`
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) {
+      document.body.removeChild(iframe)
+      return
+    }
+    doc.open()
+    doc.write(html)
+    doc.close()
+    setTimeout(() => {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
+    }, 300)
   }
 
   async function confirmCancel(reason: string) {
@@ -918,6 +982,9 @@ export function SupplyOutboundIndex() {
                         )}
                       </td>
                       <td className="col-min text-nowrap">
+                        <button type="button" className="btn btn-outline-secondary btn-sm me-1" title="查看整批詳情" onClick={() => setDetailTarget(log)}>
+                          <i className="bi bi-eye" /> 詳情
+                        </button>
                         {canEdit(log) && (
                           <button type="button" className="btn btn-outline-primary btn-sm me-1" onClick={() => openEdit(log)}>
                             <i className="bi bi-pencil" /> 編輯
@@ -966,6 +1033,58 @@ export function SupplyOutboundIndex() {
           onConfirm={(reason) => void confirmCancel(reason)}
         />
       )}
+
+      {detailTarget && (() => {
+        const rows = batchOf(detailTarget)
+        const totalQty = rows.reduce((s, l) => s + l.outbound_quantity, 0)
+        return (
+          <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title"><i className="bi bi-eye" /> 領用單詳情</h5>
+                  <button type="button" className="btn-close" onClick={() => setDetailTarget(null)} />
+                </div>
+                <div className="modal-body">
+                  <div className="card bg-light border mb-3"><div className="card-body">
+                    <div className="row g-2">
+                      <div className="col-sm-6"><div className="text-muted small">領用時間</div><div className="fw-bold">{new Date(detailTarget.outbound_time).toLocaleString('zh-TW')}</div></div>
+                      <div className="col-sm-6"><div className="text-muted small">發放據點</div><div className="fw-bold">{locationName(detailTarget.location_id)}</div></div>
+                      <div className="col-sm-6"><div className="text-muted small">領用人</div><div className="fw-bold">{detailTarget.recipient_name}</div></div>
+                      <div className="col-sm-6"><div className="text-muted small">聯絡方式</div><div>{detailTarget.recipient_contact || '—'}</div></div>
+                      <div className="col-sm-6"><div className="text-muted small">所屬鄉鎮</div><div>{detailTarget.recipient_precinct ? `${detailTarget.recipient_precinct} / ` : ''}{detailTarget.recipient_district ?? '—'}</div></div>
+                      <div className="col-sm-6"><div className="text-muted small">身分別</div><div><span className={`badge ${recipientIdentityBadgeClass(detailTarget.recipient_identity)}`}>{recipientIdentityDisplayName(detailTarget.recipient_identity)}</span></div></div>
+                      <div className="col-sm-6"><div className="text-muted small">操作人員</div><div>{detailTarget.operator}</div></div>
+                      {detailTarget.remark && <div className="col-12"><div className="text-muted small">備註</div><div style={{ whiteSpace: 'pre-wrap' }}>{detailTarget.remark}</div></div>}
+                    </div>
+                  </div></div>
+                  <div className="table-responsive border rounded">
+                    <table className="table table-sm align-middle mb-0">
+                      <thead className="table-light"><tr><th style={{ width: 40 }}>#</th><th>物資</th><th className="col-min">規格</th><th className="col-min text-end">數量</th></tr></thead>
+                      <tbody>
+                        {rows.map((l, i) => (
+                          <tr key={l.id}>
+                            <td className="text-muted">{i + 1}</td>
+                            <td><strong>{itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}`}</strong><div className="text-muted small">{itemOf(l.supply_item_id)?.category}</div></td>
+                            <td className="col-min">{itemOf(l.supply_item_id)?.specification?.trim() || '無'}</td>
+                            <td className="col-min text-end"><strong>{l.outbound_quantity}</strong> {itemOf(l.supply_item_id)?.unit ?? ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="table-light"><tr><td colSpan={3} className="text-end fw-bold">合計</td><td className="text-end fw-bold">{rows.length} 項／{totalQty} 件</td></tr></tfoot>
+                    </table>
+                  </div>
+                  {detailTarget.batch_id && rows.length > 1 && <div className="form-text mt-2">此為同一批（batch）{rows.length} 項物資的完整領用單。</div>}
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-primary" onClick={() => printReceipt(detailTarget)}><i className="bi bi-printer" /> 列印領用單</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setDetailTarget(null)}>關閉</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {editTarget && (
         <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
