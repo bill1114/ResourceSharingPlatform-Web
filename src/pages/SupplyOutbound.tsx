@@ -530,13 +530,18 @@ export function SupplyOutboundIndex() {
   const [cancelTarget, setCancelTarget] = useState<SupplyOutboundLog | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'danger'; text: string } | null>(null)
+  // 修改領用
+  const [editTarget, setEditTarget] = useState<SupplyOutboundLog | null>(null)
+  const [editForm, setEditForm] = useState({ supplyItemId: 0, quantity: '', name: '', contact: '', precinct: null as string | null, district: null as string | null, identity: '', remark: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [showEditDistrict, setShowEditDistrict] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     const [logRes, locRes, itemRes] = await Promise.all([
       supabase.from('supply_outbound_log').select('*').order('outbound_time', { ascending: false }).limit(100),
       supabase.from('supply_location').select('*'),
-      supabase.from('supply_item').select('id, item_name, specification, unit'),
+      supabase.from('supply_item').select('id, item_name, category, specification, unit, quantity, location_id, is_active'),
     ])
     setLogs((logRes.data ?? []) as SupplyOutboundLog[])
     setLocations((locRes.data ?? []) as SupplyLocation[])
@@ -582,6 +587,81 @@ export function SupplyOutboundIndex() {
   function sameBatchCount(log: SupplyOutboundLog): number {
     if (!log.batch_id) return 0
     return logs.filter((l) => l.batch_id === log.batch_id && l.id !== log.id && !l.is_cancelled).length
+  }
+
+  // 領用後經過幾個工作天（不含當天）。前端用來決定要不要顯示「編輯」按鈕；
+  // 真正的把關在 outbound_edit RPC 內（總管不限、據點管理人員限所屬據點、物資小天使限自己且 5 工作天內）。
+  function businessDaysSince(iso: string): number {
+    const start = new Date(iso)
+    start.setHours(0, 0, 0, 0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    let n = 0
+    const d = new Date(start)
+    d.setDate(d.getDate() + 1)
+    while (d <= today) {
+      const w = d.getDay()
+      if (w !== 0 && w !== 6) n++
+      d.setDate(d.getDate() + 1)
+    }
+    return n
+  }
+  function canEdit(log: SupplyOutboundLog): boolean {
+    if (log.is_cancelled) return false
+    if (isAdmin) return true
+    if (profile?.role_name === Roles.Cadre) return profile?.location_id === log.location_id
+    // 物資小天使：自己上傳的、5 個工作天內
+    const self = profile?.display_name ?? profile?.username ?? ''
+    return log.operator === self && businessDaysSince(log.outbound_time) <= 5
+  }
+
+  function openEdit(log: SupplyOutboundLog) {
+    setMessage(null)
+    setEditTarget(log)
+    setEditForm({
+      supplyItemId: log.supply_item_id,
+      quantity: String(log.outbound_quantity),
+      name: log.recipient_name,
+      contact: log.recipient_contact ?? '',
+      precinct: log.recipient_precinct,
+      district: log.recipient_district,
+      identity: log.recipient_identity ?? '',
+      remark: log.remark ?? '',
+    })
+  }
+
+  async function submitEdit(e: FormEvent) {
+    e.preventDefault()
+    if (!editTarget) return
+    const qty = Number(editForm.quantity)
+    if (!Number.isInteger(qty) || qty <= 0) {
+      setMessage({ type: 'danger', text: '領用數量必須是大於 0 的整數' })
+      return
+    }
+    if (!editForm.name.trim() || !editForm.district || !editForm.identity) {
+      setMessage({ type: 'danger', text: '請填領用人姓名、所屬鄉鎮與身分別' })
+      return
+    }
+    setEditSaving(true)
+    const { error } = await supabase.rpc('outbound_edit', {
+      p_log_id: editTarget.id,
+      p_new_supply_item_id: editForm.supplyItemId,
+      p_new_quantity: qty,
+      p_recipient_name: editForm.name.trim(),
+      p_recipient_contact: editForm.contact.trim() || null,
+      p_recipient_precinct: editForm.precinct,
+      p_recipient_district: editForm.district,
+      p_recipient_identity: editForm.identity,
+      p_remark: editForm.remark.trim() || null,
+    })
+    setEditSaving(false)
+    if (error) {
+      setMessage({ type: 'danger', text: error.message })
+      return
+    }
+    setEditTarget(null)
+    setMessage({ type: 'success', text: '領用紀錄已更新，庫存已回算' })
+    await load()
   }
 
   async function confirmCancel(reason: string) {
@@ -837,7 +917,12 @@ export function SupplyOutboundIndex() {
                           <span className="badge bg-success">已領用</span>
                         )}
                       </td>
-                      <td className="col-min">
+                      <td className="col-min text-nowrap">
+                        {canEdit(log) && (
+                          <button type="button" className="btn btn-outline-primary btn-sm me-1" onClick={() => openEdit(log)}>
+                            <i className="bi bi-pencil" /> 編輯
+                          </button>
+                        )}
                         {canCancel(log) && (
                           <button
                             type="button"
@@ -880,6 +965,89 @@ export function SupplyOutboundIndex() {
           onCancel={() => setCancelTarget(null)}
           onConfirm={(reason) => void confirmCancel(reason)}
         />
+      )}
+
+      {editTarget && (
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-content">
+              <form onSubmit={submitEdit}>
+                <div className="modal-header">
+                  <h5 className="modal-title"><i className="bi bi-pencil" /> 修改領用紀錄</h5>
+                  <button type="button" className="btn-close" onClick={() => setEditTarget(null)} />
+                </div>
+                <div className="modal-body">
+                  <div className="alert alert-light border small mb-3">
+                    {locationName(editTarget.location_id)}｜領用時間 {new Date(editTarget.outbound_time).toLocaleString('zh-TW')}｜操作人 {editTarget.operator}
+                    <div className="text-muted">改數量／品項會自動回算庫存（退回原批次、再扣新的）。</div>
+                  </div>
+                  <div className="row">
+                    <div className="col-md-8 mb-3">
+                      <label className="form-label">物資（同據點批次）*</label>
+                      <select className="form-select" value={editForm.supplyItemId} onChange={(e) => setEditForm({ ...editForm, supplyItemId: Number(e.target.value) })}>
+                        {items
+                          .filter((i) => i.location_id === editTarget.location_id && (i.is_active || i.id === editTarget.supply_item_id))
+                          .map((i) => (
+                            <option key={i.id} value={i.id}>
+                              {i.category}／{i.item_name}{i.specification ? `（${i.specification}）` : ''}－現有 {i.quantity} {i.unit ?? ''}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">領用數量 *</label>
+                      <input className="form-control" type="number" min={1} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label">領用人姓名 *</label>
+                      <input className="form-control" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label">聯絡方式</label>
+                      <input className="form-control" value={editForm.contact} onChange={(e) => setEditForm({ ...editForm, contact: e.target.value })} />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label">所屬鄉鎮 *</label>
+                      <div className="input-group">
+                        <input className="form-control" readOnly placeholder="請選擇" value={editForm.district ? `${editForm.precinct ?? ''}／${editForm.district}` : ''} />
+                        <button type="button" className="btn btn-outline-primary" onClick={() => setShowEditDistrict(true)}>選擇</button>
+                      </div>
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label className="form-label d-block">身分別 *</label>
+                      <div className="btn-group flex-wrap" role="group">
+                        {AllRecipientIdentities.map((idv) => (
+                          <button key={idv} type="button" className={`btn btn-sm ${editForm.identity === idv ? 'btn-dark' : 'btn-outline-secondary'}`} onClick={() => setEditForm({ ...editForm, identity: idv })}>
+                            {recipientIdentityDisplayName(idv)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="col-12 mb-3">
+                      <label className="form-label">備註</label>
+                      <textarea className="form-control" rows={2} value={editForm.remark} onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditTarget(null)}>取消</button>
+                  <button type="submit" className="btn btn-primary" disabled={editSaving}>{editSaving ? '儲存中…' : '儲存變更'}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          {showEditDistrict && (
+            <DistrictPickerModal
+              currentPrecinct={editForm.precinct}
+              currentDistrict={editForm.district}
+              onCancel={() => setShowEditDistrict(false)}
+              onSelect={(precinct, district) => {
+                setEditForm((f) => ({ ...f, precinct, district }))
+                setShowEditDistrict(false)
+              }}
+            />
+          )}
+        </div>
       )}
     </div>
   )
