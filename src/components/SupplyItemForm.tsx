@@ -287,6 +287,8 @@ export function SupplyItemForm({
             className="form-control"
             type="date"
             required
+            min="2000-01-01"
+            max="2100-12-31"
             value={form.expirationDate}
             onChange={(e) => setForm({ ...form, expirationDate: e.target.value })}
           />

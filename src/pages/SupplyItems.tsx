@@ -670,6 +670,8 @@ export function SupplyItems() {
                       <input
                         className="form-control"
                         type="date"
+                        min="2000-01-01"
+                        max="2100-12-31"
                         value={editForm.expirationDate}
                         onChange={(e) => setEditForm({ ...editForm, expirationDate: e.target.value })}
                       />
