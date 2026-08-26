@@ -22,7 +22,6 @@ import { ExpiringItemsPanel } from '../components/StockBatchPicker'
 import {
   DistrictPickerModal,
   OutboundCancelModal,
-  OutboundConfirmModal,
   OutboundItemPickerModal,
 } from '../components/OutboundModals'
 import { fetchExpiringItems, expiryAlert } from '../lib/stockBatch'
@@ -36,6 +35,21 @@ interface OutboundLine {
   quantity: number
 }
 
+interface RecipientBlock {
+  key: number
+  name: string
+  contact: string
+  precinct: string | null
+  district: string | null
+  identity: string
+  lines: OutboundLine[]
+}
+
+let recipientKeySeq = 1
+function blankRecipient(): RecipientBlock {
+  return { key: recipientKeySeq++, name: '', contact: '', precinct: null, district: null, identity: '', lines: [] }
+}
+
 export function SupplyOutboundCreate() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
@@ -43,25 +57,16 @@ export function SupplyOutboundCreate() {
   const navigate = useNavigate()
 
   const [locations, setLocations] = useState<SupplyLocation[]>([])
-  // 非管理人員永遠鎖在自己的據點：初始值、網址參數、快選都不得改變它，
-  // 所以 locationId 只在 isAdmin 時才真的當成可變狀態使用（見 effectiveLocationId）。
   const [adminLocationId, setAdminLocationId] = useState<number | null>(profile?.location_id ?? null)
   const effectiveLocationId = isAdmin ? adminLocationId : profile?.location_id ?? null
 
   const [expiringItems, setExpiringItems] = useState<SupplyItem[]>([])
   const [pendingItemId, setPendingItemId] = useState<number | null>(null)
 
-  // 領用人資料
-  const [recipientName, setRecipientName] = useState('')
-  const [recipientContact, setRecipientContact] = useState('')
-  const [recipientPrecinct, setRecipientPrecinct] = useState<string | null>(null)
-  const [recipientDistrict, setRecipientDistrict] = useState<string | null>(null)
-  const [recipientIdentity, setRecipientIdentity] = useState('')
-
-  // 批次清單與彈窗
-  const [lines, setLines] = useState<OutboundLine[]>([])
-  const [showDistrictModal, setShowDistrictModal] = useState(false)
-  const [showItemModal, setShowItemModal] = useState(false)
+  // 一張單多位領用人，每位各自的物資清單。
+  const [recipients, setRecipients] = useState<RecipientBlock[]>([blankRecipient()])
+  const [itemModalFor, setItemModalFor] = useState<number | null>(null) // 正在為哪位領用人加物資（recipient.key）
+  const [districtModalFor, setDistrictModalFor] = useState<number | null>(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
   const [remark, setRemark] = useState('')
@@ -69,59 +74,70 @@ export function SupplyOutboundCreate() {
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // 只借用 useItemPicker 的「該據點 + 有庫存」清單，三層連動下拉在批次模式已用不到
-  // （改由 OutboundItemPickerModal 自己的搜尋／篩選取代）。
   const picker = useItemPicker(effectiveLocationId)
   const { items: pickerItems, loading: pickerLoading } = picker
-
   const operatorName = profile?.display_name ?? profile?.username ?? ''
   const expiryScope = useMemo(() => (isAdmin ? null : profile?.location_id ?? null), [isAdmin, profile?.location_id])
 
   useEffect(() => {
-    supabase
-      .from('supply_location')
-      .select('*')
-      .eq('is_active', true)
-      .order('id')
-      .then(({ data }) => setLocations((data ?? []) as SupplyLocation[]))
+    supabase.from('supply_location').select('*').eq('is_active', true).order('id').then(({ data }) => setLocations((data ?? []) as SupplyLocation[]))
   }, [])
-
   useEffect(() => {
     void fetchExpiringItems(expiryScope).then(setExpiringItems)
   }, [expiryScope])
 
-  // 同一個批次已經加進清單的數量要從可領數量扣掉，不然使用者會加出「兩列合計
-  // 超過庫存」的清單，錯誤要等送出才被資料庫擋下來。
+  // 同一批次跨「所有領用人」已加入的數量，都要從可領數量扣掉。
   const remainingOf = useCallback(
-    (item: SupplyItem) => item.quantity - (lines.find((l) => l.item.id === item.id)?.quantity ?? 0),
-    [lines]
+    (item: SupplyItem) => item.quantity - recipients.reduce((s, r) => s + (r.lines.find((l) => l.item.id === item.id)?.quantity ?? 0), 0),
+    [recipients]
   )
 
-  // 加入清單：同一個批次重複加就累加數量，不另開一列。
-  const addLine = useCallback((item: SupplyItem, quantity: number) => {
+  function patchRecipient(key: number, patch: Partial<RecipientBlock>) {
+    setRecipients((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+  }
+  function addRecipient() {
+    setRecipients((prev) => [...prev, blankRecipient()])
+  }
+  function removeRecipient(key: number) {
+    setRecipients((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)))
+  }
+
+  // 加物資到某位領用人（同批次自動累加）。
+  const addLineTo = useCallback((key: number, item: SupplyItem, quantity: number) => {
     setError(null)
-    setLines((prev) => {
-      const idx = prev.findIndex((l) => l.item.id === item.id)
-      if (idx < 0) return [...prev, { item, quantity }]
-      const next = [...prev]
-      next[idx] = { item, quantity: next[idx].quantity + quantity }
-      return next
-    })
-    setShowItemModal(false)
+    setRecipients((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r
+        const idx = r.lines.findIndex((l) => l.item.id === item.id)
+        if (idx < 0) return { ...r, lines: [...r.lines, { item, quantity }] }
+        const lines = [...r.lines]
+        lines[idx] = { item, quantity: lines[idx].quantity + quantity }
+        return { ...r, lines }
+      })
+    )
+    setItemModalFor(null)
   }, [])
 
-  function updateLineQuantity(itemId: number, value: string) {
+  function updateLineQty(key: number, itemId: number, value: string) {
     const qty = Number(value)
-    setLines((prev) => prev.map((l) => (l.item.id === itemId ? { ...l, quantity: qty } : l)))
+    setRecipients((prev) => prev.map((r) => (r.key === key ? { ...r, lines: r.lines.map((l) => (l.item.id === itemId ? { ...l, quantity: qty } : l)) } : r)))
+  }
+  function removeLineFrom(key: number, itemId: number) {
+    setRecipients((prev) => prev.map((r) => (r.key === key ? { ...r, lines: r.lines.filter((l) => l.item.id !== itemId) } : r)))
   }
 
-  function removeLine(itemId: number) {
-    setLines((prev) => prev.filter((l) => l.item.id !== itemId))
-  }
+  // 即期快選／戰情總覽帶入：加到第一位領用人。
+  const addToFirst = useCallback((item: SupplyItem, quantity: number) => {
+    setError(null)
+    setRecipients((prev) => {
+      if (prev.length === 0) return prev
+      const first = prev[0]
+      const idx = first.lines.findIndex((l) => l.item.id === item.id)
+      const lines = idx < 0 ? [...first.lines, { item, quantity }] : first.lines.map((l, i) => (i === idx ? { ...l, quantity: l.quantity + quantity } : l))
+      return [{ ...first, lines }, ...prev.slice(1)]
+    })
+  }, [])
 
-  // 戰情總覽的「選擇領用」帶 ?supplyItemId=&locationId= 進來。
-  // locationId 只有管理人員採用；其他角色一律以自己的據點為準（RLS 也擋得住，
-  // 但先在 UI 擋掉才不會出現空白選單這種看不懂的畫面）。
   useEffect(() => {
     const qLocationId = searchParams.get('locationId')
     const qItemId = searchParams.get('supplyItemId')
@@ -129,15 +145,13 @@ export function SupplyOutboundCreate() {
     if (qItemId) setPendingItemId(Number(qItemId))
   }, [searchParams, isAdmin])
 
-  // 快選要等該據點的物資載入完成才挑得到批次，所以先記在 pendingItemId，
-  // 載好之後再加進清單（預設數量 1）。
   useEffect(() => {
     if (pendingItemId == null) return
     const target = pickerItems.find((x) => x.id === pendingItemId)
     if (!target) return
-    addLine(target, 1)
+    addToFirst(target, 1)
     setPendingItemId(null)
-  }, [pendingItemId, pickerItems, addLine])
+  }, [pendingItemId, pickerItems, addToFirst])
 
   function quickPick(item: SupplyItem) {
     setError(null)
@@ -147,7 +161,7 @@ export function SupplyOutboundCreate() {
         setError('這項物資不在您所屬的據點')
         return
       }
-      if (lines.length > 0) {
+      if (recipients.some((r) => r.lines.length > 0)) {
         setError('一次領用只能發放同一個據點的物資；請先清空領用清單再切換據點')
         return
       }
@@ -156,39 +170,42 @@ export function SupplyOutboundCreate() {
     setPendingItemId(item.id)
   }
 
-  // 切換據點會讓清單裡的批次全部失效（批次是綁在據點上的），直接清空。
   function changeLocation(id: number | null) {
     setAdminLocationId(id)
     setError(null)
-    if (lines.length > 0) {
-      setLines([])
+    if (recipients.some((r) => r.lines.length > 0)) {
+      setRecipients((prev) => prev.map((r) => ({ ...r, lines: [] })))
       setNotice('已切換據點，原本的領用清單已清空')
     }
   }
 
-  const totalQuantity = lines.reduce((sum, l) => sum + (Number.isFinite(l.quantity) ? l.quantity : 0), 0)
+  const grandTotalItems = recipients.reduce((s, r) => s + r.lines.length, 0)
+  const grandTotalQty = recipients.reduce((s, r) => s + r.lines.reduce((a, l) => a + (Number.isFinite(l.quantity) ? l.quantity : 0), 0), 0)
 
-  // 送出前的檢查抽出來，因為現在有兩個時機要用到：按「確認領用」開確認視窗前，
-  // 以及確認視窗按下「確定領用」時（視窗開著的期間清單其實動不了，但多一道
-  // 保險比較不會在之後改版時漏掉）。回傳 null 代表通過。
   function validate(): string | null {
     if (!effectiveLocationId) return isAdmin ? '請選擇發放據點' : '您的帳號尚未指定所屬據點，無法領用'
-    if (!recipientName.trim()) return '請輸入領用人姓名'
-    if (!recipientDistrict) return '請選擇領用人所屬鄉鎮'
-    if (!recipientIdentity) return '請選擇領用人身分別'
-    if (lines.length === 0) return '請至少加入一項要派送的物資'
-    for (const l of lines) {
-      if (!Number.isInteger(l.quantity) || l.quantity <= 0) {
-        return `「${l.item.item_name}」的數量必須是大於 0 的整數`
+    if (recipients.length === 0) return '請至少加入一位領用人'
+    for (const r of recipients) {
+      if (!r.name.trim()) return '每一位領用人都要填姓名'
+      if (!r.district) return `「${r.name || '未命名'}」請選擇所屬鄉鎮`
+      if (!r.identity) return `「${r.name || '未命名'}」請選擇身分別`
+      if (r.lines.length === 0) return `「${r.name}」至少要加入一項物資`
+      for (const l of r.lines) {
+        if (!Number.isInteger(l.quantity) || l.quantity <= 0) return `「${r.name}」的「${l.item.item_name}」數量必須是大於 0 的整數`
       }
-      if (l.quantity > l.item.quantity) {
-        return `「${l.item.item_name}」超過現有庫存（現有 ${l.item.quantity} ${l.item.unit ?? ''}）`
-      }
+    }
+    const byItem = new Map<number, { qty: number; item: SupplyItem }>()
+    for (const r of recipients) for (const l of r.lines) {
+      const cur = byItem.get(l.item.id) ?? { qty: 0, item: l.item }
+      cur.qty += l.quantity
+      byItem.set(l.item.id, cur)
+    }
+    for (const { qty, item } of byItem.values()) {
+      if (qty > item.quantity) return `「${item.item_name}」全部領用人合計 ${qty} 超過現有庫存（${item.quantity} ${item.unit ?? ''}）`
     }
     return null
   }
 
-  // 表單送出不再直接寫資料，先開確認視窗把整張領用單攤出來。
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
@@ -201,7 +218,6 @@ export function SupplyOutboundCreate() {
     setShowConfirmModal(true)
   }
 
-  // 確認視窗按下「確定領用」才真的呼叫 Edge Function。
   async function doSubmit() {
     const problem = validate()
     if (problem) {
@@ -209,25 +225,22 @@ export function SupplyOutboundCreate() {
       setError(problem)
       return
     }
-
     setSubmitting(true)
     const { data, error: invokeError } = await supabase.functions.invoke('outbound-create', {
       body: {
         locationId: effectiveLocationId,
-        items: lines.map((l) => ({ supplyItemId: l.item.id, quantity: l.quantity })),
-        recipientName,
-        recipientContact,
-        recipientPrecinct,
-        recipientDistrict,
-        recipientIdentity,
+        recipients: recipients.map((r) => ({
+          name: r.name.trim(),
+          contact: r.contact.trim(),
+          precinct: r.precinct,
+          district: r.district,
+          identity: r.identity,
+          items: r.lines.map((l) => ({ supplyItemId: l.item.id, quantity: l.quantity })),
+        })),
         remark,
       },
     })
     setSubmitting(false)
-
-    // 失敗時要拿 Edge Function 自己的中文訊息：supabase-js 會把非 2xx 的內容
-    // 換成 "non-2xx status code"，真正的原因藏在 response body 裡。
-    // 失敗要把確認視窗關掉，否則錯誤訊息會被蓋在視窗後面看不到。
     if (invokeError || !data?.success) {
       setShowConfirmModal(false)
       setError(data?.message ?? (await functionErrorMessage(invokeError, '領用失敗')))
@@ -235,6 +248,8 @@ export function SupplyOutboundCreate() {
     }
     navigate('/outbound', { state: { flash: data.message } })
   }
+
+  const locName = (id: number | null) => locations.find((l) => l.id === id)?.location_name ?? ''
 
   return (
     <div className="container-fluid mt-4">
@@ -248,13 +263,7 @@ export function SupplyOutboundCreate() {
       </div>
       <hr />
 
-      <ExpiringItemsPanel
-        items={expiringItems}
-        locations={locations}
-        title="即期／已過期物資，建議優先領用"
-        actionLabel="加入清單"
-        onPick={quickPick}
-      />
+      <ExpiringItemsPanel items={expiringItems} locations={locations} title="即期／已過期物資，建議優先領用" actionLabel="加入第一位清單" onPick={quickPick} defaultCollapsed />
 
       {error && <div className="alert alert-danger">{error}</div>}
       {notice && <div className="alert alert-info">{notice}</div>}
@@ -262,224 +271,134 @@ export function SupplyOutboundCreate() {
       <div className="row g-4">
         <div className="col-lg-8">
           <form onSubmit={handleSubmit}>
-            {/* ---------- 步驟一：領用人資料 ---------- */}
+            {/* 發放據點（整張單共用） */}
             <div className="card shadow-sm mb-4">
               <div className="card-header bg-light">
-                <i className="bi bi-person-vcard" /> 步驟一：領用人資料
+                <i className="bi bi-geo" /> 發放據點
               </div>
               <div className="card-body">
-                <div className="row">
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">使用人名稱 *</label>
-                    <input
-                      className="form-control"
-                      required
-                      maxLength={50}
-                      placeholder="例如：陳先生"
-                      value={recipientName}
-                      onChange={(e) => setRecipientName(e.target.value)}
-                    />
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">使用人聯絡方式</label>
-                    <input
-                      className="form-control"
-                      maxLength={50}
-                      placeholder="例如：手機或地址"
-                      value={recipientContact}
-                      onChange={(e) => setRecipientContact(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="row">
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">所屬鄉鎮 *</label>
-                    <div className="input-group">
-                      <input
-                        className="form-control"
-                        readOnly
-                        placeholder="請點右側按鈕選擇"
-                        value={recipientDistrict ? `${recipientPrecinct ?? ''}／${recipientDistrict}` : ''}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-outline-primary"
-                        onClick={() => setShowDistrictModal(true)}
-                      >
-                        <i className="bi bi-geo-alt" /> 選擇
-                      </button>
-                      {recipientDistrict && (
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary"
-                          title="清除"
-                          onClick={() => {
-                            setRecipientPrecinct(null)
-                            setRecipientDistrict(null)
-                          }}
-                        >
-                          <i className="bi bi-x-lg" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="form-text">直接點選鄉鎮市（依分區列出，雲林縣）。</div>
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label d-block">身分別 *</label>
-                    <div className="btn-group flex-wrap" role="group">
-                      {AllRecipientIdentities.map((idv) => (
-                        <button
-                          key={idv}
-                          type="button"
-                          className={`btn ${recipientIdentity === idv ? 'btn-dark' : 'btn-outline-secondary'}`}
-                          onClick={() => setRecipientIdentity(idv)}
-                        >
-                          {recipientIdentityDisplayName(idv)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ---------- 步驟二：發放據點 ---------- */}
-            <div className="card shadow-sm mb-4">
-              <div className="card-header bg-light">
-                <i className="bi bi-geo" /> 步驟二：發放據點
-              </div>
-              <div className="card-body">
-                <label className="form-label">據點 *</label>
                 {isAdmin ? (
-                  <select
-                    className="form-select"
-                    required
-                    value={adminLocationId ?? ''}
-                    onChange={(e) => changeLocation(e.target.value ? Number(e.target.value) : null)}
-                  >
+                  <select className="form-select" required value={adminLocationId ?? ''} onChange={(e) => changeLocation(e.target.value ? Number(e.target.value) : null)}>
                     <option value="">請選擇據點</option>
                     {locations.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.location_name}
-                      </option>
+                      <option key={l.id} value={l.id}>{l.location_name}</option>
                     ))}
                   </select>
                 ) : (
                   <>
-                    <input
-                      className="form-control"
-                      disabled
-                      value={locations.find((l) => l.id === effectiveLocationId)?.location_name ?? ''}
-                    />
-                    <div className="form-text">
-                      只有最高權限管理人員可以切換據點；您的帳號只能發放所屬據點的物資。
-                    </div>
+                    <input className="form-control" disabled value={locName(effectiveLocationId)} />
+                    <div className="form-text">只有最高權限管理人員可切換據點；您的帳號只能發放所屬據點的物資。</div>
                   </>
                 )}
               </div>
             </div>
 
-            {/* ---------- 步驟三：領用清單（批次） ---------- */}
-            <div className="card shadow-sm mb-4">
-              <div className="card-header bg-light d-flex justify-content-between align-items-center">
-                <span>
-                  <i className="bi bi-list-check" /> 步驟三：領用清單
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  disabled={!effectiveLocationId}
-                  onClick={() => {
-                    setError(null)
-                    setShowItemModal(true)
-                  }}
-                >
-                  <i className="bi bi-plus-circle" /> 新增物資
-                </button>
-              </div>
-              <div className="table-responsive">
-                <table className="table table-hover align-middle mb-0">
-                  <thead className="table-light">
-                    <tr>
-                      <th>物資</th>
-                      <th className="col-min">規格／批次</th>
-                      <th className="col-min">庫存</th>
-                      <th className="col-min" style={{ width: 140 }}>
-                        領用數量
-                      </th>
-                      <th className="col-min" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="text-center text-muted py-4">
-                          {effectiveLocationId
-                            ? '尚未加入任何物資，請按右上角「新增物資」'
-                            : '請先選擇發放據點'}
-                        </td>
-                      </tr>
-                    ) : (
-                      lines.map((l) => {
-                        const alert = expiryAlert(l.item)
-                        const over = l.quantity > l.item.quantity
-                        return (
-                          <tr key={l.item.id}>
-                            <td>
-                              <strong>{l.item.item_name}</strong>
-                              <div className="text-muted small">{l.item.category}</div>
-                            </td>
-                            <td className="col-min">
-                              {l.item.specification?.trim() || '無'}
-                              {alert && <span className={`badge ms-1 ${alert.badgeClass}`}>{alert.label}</span>}
-                            </td>
-                            <td className="col-min">
-                              {l.item.quantity} {l.item.unit ?? ''}
-                            </td>
-                            <td className="col-min">
-                              <input
-                                className={`form-control form-control-sm ${over ? 'is-invalid' : ''}`}
-                                type="number"
-                                min={1}
-                                max={l.item.quantity}
-                                value={l.quantity}
-                                onChange={(e) => updateLineQuantity(l.item.id, e.target.value)}
-                              />
-                            </td>
-                            <td className="col-min text-end">
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-danger"
-                                onClick={() => removeLine(l.item.id)}
-                                title="移除"
-                              >
-                                <i className="bi bi-trash" />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })
+            {/* 領用人（可多位） */}
+            {recipients.map((r, ri) => {
+              const rTotalQty = r.lines.reduce((a, l) => a + (Number.isFinite(l.quantity) ? l.quantity : 0), 0)
+              return (
+                <div className="card shadow-sm mb-4 border-primary" key={r.key}>
+                  <div className="card-header bg-primary-subtle text-dark d-flex justify-content-between align-items-center">
+                    <span>
+                      <i className="bi bi-person-vcard" /> 領用人 {ri + 1}
+                    </span>
+                    {recipients.length > 1 && (
+                      <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeRecipient(r.key)}>
+                        <i className="bi bi-x-lg" /> 移除這位
+                      </button>
                     )}
-                  </tbody>
-                  {lines.length > 0 && (
-                    <tfoot className="table-light">
-                      <tr>
-                        <td colSpan={3} className="text-end fw-bold">
-                          合計
-                        </td>
-                        <td className="fw-bold">
-                          {lines.length} 項／{totalQuantity} 件
-                        </td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
+                  </div>
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">使用人名稱 *</label>
+                        <input className="form-control" maxLength={50} placeholder="例如：陳先生" value={r.name} onChange={(e) => patchRecipient(r.key, { name: e.target.value })} />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">使用人聯絡方式</label>
+                        <input className="form-control" maxLength={50} placeholder="例如：手機或地址" value={r.contact} onChange={(e) => patchRecipient(r.key, { contact: e.target.value })} />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">所屬鄉鎮 *</label>
+                        <div className="input-group">
+                          <input className="form-control" readOnly placeholder="請點右側按鈕選擇" value={r.district ? `${r.precinct ?? ''}／${r.district}` : ''} />
+                          <button type="button" className="btn btn-outline-primary" onClick={() => setDistrictModalFor(r.key)}>
+                            <i className="bi bi-geo-alt" /> 選擇
+                          </button>
+                          {r.district && (
+                            <button type="button" className="btn btn-outline-secondary" title="清除" onClick={() => patchRecipient(r.key, { precinct: null, district: null })}>
+                              <i className="bi bi-x-lg" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label d-block">身分別 *</label>
+                        <div className="btn-group flex-wrap" role="group">
+                          {AllRecipientIdentities.map((idv) => (
+                            <button key={idv} type="button" className={`btn ${r.identity === idv ? 'btn-dark' : 'btn-outline-secondary'}`} onClick={() => patchRecipient(r.key, { identity: idv })}>
+                              {recipientIdentityDisplayName(idv)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="fw-bold"><i className="bi bi-list-check" /> 領用清單</span>
+                      <button type="button" className="btn btn-sm btn-primary" disabled={!effectiveLocationId} onClick={() => { setError(null); setItemModalFor(r.key) }}>
+                        <i className="bi bi-plus-circle" /> 新增物資
+                      </button>
+                    </div>
+                    <div className="table-responsive border rounded">
+                      <table className="table table-hover align-middle mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th>物資</th>
+                            <th className="col-min">規格／批次</th>
+                            <th className="col-min">庫存</th>
+                            <th className="col-min" style={{ width: 130 }}>領用數量</th>
+                            <th className="col-min" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {r.lines.length === 0 ? (
+                            <tr><td colSpan={5} className="text-center text-muted py-3">{effectiveLocationId ? '尚未加入物資，按右上「新增物資」' : '請先選擇發放據點'}</td></tr>
+                          ) : (
+                            r.lines.map((l) => {
+                              const alert = expiryAlert(l.item)
+                              const over = l.quantity > l.item.quantity
+                              return (
+                                <tr key={l.item.id}>
+                                  <td><strong>{l.item.item_name}</strong><div className="text-muted small">{l.item.category}</div></td>
+                                  <td className="col-min">{l.item.specification?.trim() || '無'}{alert && <span className={`badge ms-1 ${alert.badgeClass}`}>{alert.label}</span>}</td>
+                                  <td className="col-min">{l.item.quantity} {l.item.unit ?? ''}</td>
+                                  <td className="col-min">
+                                    <input className={`form-control form-control-sm ${over ? 'is-invalid' : ''}`} type="number" min={1} max={l.item.quantity} value={l.quantity} onChange={(e) => updateLineQty(r.key, l.item.id, e.target.value)} />
+                                  </td>
+                                  <td className="col-min text-end"><button type="button" className="btn btn-sm btn-outline-danger" title="移除" onClick={() => removeLineFrom(r.key, l.item.id)}><i className="bi bi-trash" /></button></td>
+                                </tr>
+                              )
+                            })
+                          )}
+                        </tbody>
+                        {r.lines.length > 0 && (
+                          <tfoot className="table-light"><tr><td colSpan={3} className="text-end fw-bold">小計</td><td className="fw-bold">{r.lines.length} 項／{rTotalQty} 件</td><td /></tr></tfoot>
+                        )}
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            <div className="mb-4">
+              <button type="button" className="btn btn-outline-primary" onClick={addRecipient}>
+                <i className="bi bi-person-plus" /> 新增領用人
+              </button>
             </div>
 
-            {/* ---------- 其他 ---------- */}
+            {/* 備註 + 送出 */}
             <div className="card shadow-sm">
               <div className="card-body">
                 <div className="mb-3">
@@ -487,25 +406,15 @@ export function SupplyOutboundCreate() {
                   <input className="form-control" disabled value={operatorName} />
                   <div className="form-text">系統會自動記錄目前登入帳號為操作人員。</div>
                 </div>
-
                 <div className="mb-3">
                   <label className="form-label">備註</label>
-                  <textarea
-                    className="form-control"
-                    rows={3}
-                    placeholder="發放原因或其他說明（整批共用）"
-                    value={remark}
-                    onChange={(e) => setRemark(e.target.value)}
-                  />
+                  <textarea className="form-control" rows={2} placeholder="發放原因或其他說明（整張單共用）" value={remark} onChange={(e) => setRemark(e.target.value)} />
                 </div>
-
                 <div className="d-flex gap-2">
-                  <button type="submit" className="btn btn-primary btn-lg" disabled={submitting || lines.length === 0}>
-                    <i className="bi bi-check-circle" /> 確認領用（{lines.length} 項）
+                  <button type="submit" className="btn btn-primary btn-lg" disabled={submitting || grandTotalItems === 0}>
+                    <i className="bi bi-check-circle" /> 確認領用（{recipients.length} 位／{grandTotalItems} 項）
                   </button>
-                  <Link className="btn btn-secondary btn-lg" to="/outbound">
-                    ← 返回紀錄
-                  </Link>
+                  <Link className="btn btn-secondary btn-lg" to="/outbound">← 返回紀錄</Link>
                 </div>
               </div>
             </div>
@@ -514,67 +423,92 @@ export function SupplyOutboundCreate() {
 
         <div className="col-lg-4">
           <div className="alert alert-info">
-            <strong>
-              <i className="bi bi-info-circle" /> 領用說明
-            </strong>
+            <strong><i className="bi bi-info-circle" /> 領用說明</strong>
             <ul className="mb-0 mt-2">
-              <li>以領用人為主體：先填人的資料，再一項一項加入要派送的物資</li>
-              <li>物資清單只會顯示您所屬據點的庫存；只有最高權限管理人員能切換據點</li>
-              <li>同一個批次重複加入會自動累加數量</li>
-              <li>整批在同一個交易裡扣庫存，其中一項不足會整批取消</li>
+              <li>一張單可加入多位領用人，每位各自填資料與物資清單</li>
+              <li>按「新增領用人」再加一位，最後一次確認送出</li>
+              <li>物資清單只顯示所屬據點的庫存；只有最高權限管理人員能切換據點</li>
+              <li>全部領用人在同一個交易裡扣庫存，其中一項不足會整批取消</li>
             </ul>
           </div>
           <div className="alert alert-warning">
-            <strong>
-              <i className="bi bi-exclamation-triangle" /> 注意事項
-            </strong>
+            <strong><i className="bi bi-exclamation-triangle" /> 注意事項</strong>
             <ul className="mb-0 mt-2">
               <li>請確認每一項的領用數量正確</li>
-              <li>領用後無法直接復原</li>
-              <li>建議填寫領用人聯絡方式以利後續追蹤</li>
+              <li>領用後可於「領用紀錄」修改（物資小天使限 5 個工作天內、自己上傳的）</li>
+              <li>建議填寫聯絡方式以利後續追蹤</li>
             </ul>
           </div>
         </div>
       </div>
 
-      {showDistrictModal && (
+      {districtModalFor != null && (
         <DistrictPickerModal
-          currentPrecinct={recipientPrecinct}
-          currentDistrict={recipientDistrict}
-          onCancel={() => setShowDistrictModal(false)}
+          currentPrecinct={recipients.find((r) => r.key === districtModalFor)?.precinct ?? null}
+          currentDistrict={recipients.find((r) => r.key === districtModalFor)?.district ?? null}
+          onCancel={() => setDistrictModalFor(null)}
           onSelect={(precinct, district) => {
-            setRecipientPrecinct(precinct)
-            setRecipientDistrict(district)
-            setShowDistrictModal(false)
+            patchRecipient(districtModalFor, { precinct, district })
+            setDistrictModalFor(null)
           }}
         />
       )}
 
-      {showItemModal && (
+      {itemModalFor != null && (
         <OutboundItemPickerModal
           items={pickerItems}
           loading={pickerLoading}
           remainingOf={remainingOf}
-          onCancel={() => setShowItemModal(false)}
-          onAdd={addLine}
+          onCancel={() => setItemModalFor(null)}
+          onAdd={(item, qty) => addLineTo(itemModalFor, item, qty)}
         />
       )}
 
       {showConfirmModal && (
-        <OutboundConfirmModal
-          recipientName={recipientName}
-          recipientContact={recipientContact}
-          recipientPrecinct={recipientPrecinct}
-          recipientDistrict={recipientDistrict}
-          recipientIdentity={recipientIdentity}
-          locationName={locations.find((l) => l.id === effectiveLocationId)?.location_name ?? ''}
-          operatorName={operatorName}
-          remark={remark}
-          lines={lines}
-          submitting={submitting}
-          onCancel={() => setShowConfirmModal(false)}
-          onConfirm={() => void doSubmit()}
-        />
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title"><i className="bi bi-clipboard-check" /> 確認本次領用內容</h5>
+                <button type="button" className="btn-close" disabled={submitting} onClick={() => setShowConfirmModal(false)} />
+              </div>
+              <div className="modal-body">
+                <div className="mb-2 small text-muted">發放據點：{locName(effectiveLocationId)}｜操作人員：{operatorName}{remark.trim() ? `｜備註：${remark.trim()}` : ''}</div>
+                {recipients.map((r, ri) => (
+                  <div className="card border mb-2" key={r.key}>
+                    <div className="card-header bg-light py-2">
+                      <strong>領用人 {ri + 1}：{r.name}</strong>
+                      <span className="text-muted small ms-2">
+                        {r.contact ? `${r.contact}／` : ''}{r.district ?? '—'}
+                        <span className="ms-1"><span className={`badge ${recipientIdentityBadgeClass(r.identity)}`}>{recipientIdentityDisplayName(r.identity)}</span></span>
+                      </span>
+                    </div>
+                    <table className="table table-sm mb-0">
+                      <thead><tr><th>物資</th><th className="col-min">規格</th><th className="col-min text-end">領用</th><th className="col-min text-end">領用後剩餘</th></tr></thead>
+                      <tbody>
+                        {r.lines.map((l) => (
+                          <tr key={l.item.id}>
+                            <td>{l.item.item_name}<div className="text-muted small">{l.item.category}</div></td>
+                            <td className="col-min">{l.item.specification?.trim() || '無'}</td>
+                            <td className="col-min text-end"><strong>{l.quantity}</strong> {l.item.unit ?? ''}</td>
+                            <td className="col-min text-end text-muted">{l.item.quantity - l.quantity} {l.item.unit ?? ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+                <div className="alert alert-warning mt-2 mb-0">
+                  <i className="bi bi-exclamation-triangle" /> 合計 {recipients.length} 位領用人、{grandTotalItems} 項、{grandTotalQty} 件。按「確定領用」會<strong>立刻扣除庫存</strong>，請再確認一次。
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" disabled={submitting} onClick={() => setShowConfirmModal(false)}><i className="bi bi-pencil" /> 返回修改</button>
+                <button type="button" className="btn btn-primary" disabled={submitting} onClick={() => void doSubmit()}><i className="bi bi-check-circle" /> {submitting ? '處理中…' : '確定領用'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
