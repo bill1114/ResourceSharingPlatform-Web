@@ -100,6 +100,7 @@ export function SupplyItems() {
         safety_stock: Number(editForm.safetyStock) || 0,
         remark: editForm.remark.trim() || null,
         image_path: imagePath,
+        updated_by: profile?.display_name ?? profile?.username ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', editItem.id)

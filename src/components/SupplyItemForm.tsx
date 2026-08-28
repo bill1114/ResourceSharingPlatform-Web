@@ -145,6 +145,7 @@ export function SupplyItemForm({
       inventory_item_variant_id: catalog.variantId,
       safety_stock: resolvedSafetyStock(),
       remark: form.remark.trim() || null,
+      created_by: profile?.display_name ?? profile?.username ?? null,
       ...(imagePath ? { image_path: imagePath } : {}),
     }
 

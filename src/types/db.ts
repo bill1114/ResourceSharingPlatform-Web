@@ -195,6 +195,8 @@ export interface SupplyItem {
   safety_stock: number
   remark: string | null
   is_active: boolean
+  created_by: string | null // 建立此批次的操作人（入庫時寫入）
+  updated_by: string | null // 最後修改此批次的操作人（編輯時寫入）
   created_at: string
   updated_at: string | null
 }
