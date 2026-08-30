@@ -9,6 +9,9 @@ import { locationColorStyle } from '../lib/colors'
 import { statusColorMap, statusCardStyle, AllDashboardStatuses, type DashboardStatusKey } from '../lib/statusColors'
 import { fetchLowStock, isItemLowStock } from '../lib/lowStock'
 import { FlashMessage } from '../components/FlashMessage'
+import { useAuth } from '../hooks/useAuth'
+import { Roles } from '../lib/enums'
+import { functionErrorMessage } from '../lib/functionError'
 import type { SupplyLocation, SupplyRequest } from '../types/db'
 
 interface LowStockRow {
@@ -50,6 +53,9 @@ interface LocationSummary {
 }
 
 export function Dashboard() {
+  const { profile } = useAuth()
+  const isAdmin = profile?.role_name === Roles.Admin
+  const isAdminOrCadre = isAdmin || profile?.role_name === Roles.Cadre
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   // 據點低庫存改為「數實際低庫存的物資批次」(與狀態清單、物資清單一致)，
   // 不再數 location_low_stock_view 的門檻筆數(會含沒貨的、與清單對不起來)。
@@ -123,6 +129,26 @@ export function Dashboard() {
   async function markRequest(id: number, status: 'Fulfilled' | 'Cancelled') {
     await supabase.from('supply_request').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
     void load()
+  }
+
+  // 總管核准「報廢申請」：實際執行報廢（走 disposal-create），成功後把申請標記完成。
+  async function approveDisposal(r: SupplyRequest) {
+    if (!r.supply_item_id) return
+    if (!confirm(`核准並報廢「${r.item_name}」${r.quantity} 件（已過期）？此動作會扣除庫存。`)) return
+    const { data, error } = await supabase.functions.invoke('disposal-create', {
+      body: {
+        supplyItemId: r.supply_item_id,
+        locationId: r.requesting_location_id,
+        disposalQuantity: r.quantity,
+        reason: 'Expired',
+        remark: `核准幫主報廢申請（${r.requested_by ?? ''}）`,
+      },
+    })
+    if (error || !data?.success) {
+      alert(data?.message ?? (await functionErrorMessage(error, '報廢失敗')))
+      return
+    }
+    await markRequest(r.id, 'Fulfilled')
   }
 
   function locationName(id: number): string {
@@ -256,10 +282,13 @@ export function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {requests.map((r) => (
+                      {requests.map((r) => {
+                        const isDisposal = r.request_type === 'disposal'
+                        return (
                         <tr key={r.id}>
                           <td className="col-min">{new Date(r.created_at).toLocaleString('zh-TW')}</td>
                           <td>
+                            {isDisposal && <span className="badge bg-dark me-1">報廢申請</span>}
                             <strong>{r.item_name}</strong>
                             {r.specification ? <span className="text-muted">／{r.specification}</span> : null}
                             <span className="text-muted">（{r.category}）</span>
@@ -282,19 +311,37 @@ export function Dashboard() {
                           <td className="col-min">{r.requested_by}</td>
                           <td className="col-min">
                             <div className="d-flex gap-1">
-                              <Link className="btn btn-sm btn-primary" to={`/transfers/create?requestId=${r.id}`} title="從來源據點轉移補貨">
-                                <i className="bi bi-arrow-left-right" /> 轉移補貨
-                              </Link>
-                              <button className="btn btn-sm btn-outline-success" onClick={() => void markRequest(r.id, 'Fulfilled')}>
-                                完成
-                              </button>
-                              <button className="btn btn-sm btn-outline-secondary" onClick={() => void markRequest(r.id, 'Cancelled')}>
-                                取消
-                              </button>
+                              {isDisposal ? (
+                                isAdmin ? (
+                                  <>
+                                    <button className="btn btn-sm btn-dark" onClick={() => void approveDisposal(r)} title="核准並報廢">
+                                      <i className="bi bi-trash3" /> 核准報廢
+                                    </button>
+                                    <button className="btn btn-sm btn-outline-secondary" onClick={() => void markRequest(r.id, 'Cancelled')}>駁回</button>
+                                  </>
+                                ) : (
+                                  <span className="text-muted small">等待總管核准</span>
+                                )
+                              ) : (
+                                <>
+                                  {isAdminOrCadre && (
+                                    <Link className="btn btn-sm btn-primary" to={`/transfers/create?requestId=${r.id}`} title="從來源據點轉移補貨">
+                                      <i className="bi bi-arrow-left-right" /> 轉移補貨
+                                    </Link>
+                                  )}
+                                  {isAdmin && (
+                                    <>
+                                      <button className="btn btn-sm btn-outline-success" onClick={() => void markRequest(r.id, 'Fulfilled')}>完成</button>
+                                      <button className="btn btn-sm btn-outline-secondary" onClick={() => void markRequest(r.id, 'Cancelled')}>取消</button>
+                                    </>
+                                  )}
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

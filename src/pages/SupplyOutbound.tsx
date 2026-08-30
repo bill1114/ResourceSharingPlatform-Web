@@ -744,8 +744,13 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
     await load()
   }
 
+  // 小幫手只看「自己上傳的」領用紀錄（個人領用紀錄）。
+  const isSocialWorker = profile?.role_name === Roles.SocialWorker
+  const selfName = profile?.display_name ?? profile?.username ?? ''
+
   const filtered = useMemo(() => {
     return logs.filter((l) => {
+      if (isSocialWorker && l.operator !== selfName) return false
       if (locationFilter && l.location_id !== Number(locationFilter)) return false
       if (identityFilter && l.recipient_identity !== identityFilter) return false
       if (itemFilter && itemNameOf(l.supply_item_id) !== itemFilter) return false
@@ -768,7 +773,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logs, keyword, locationFilter, identityFilter, itemFilter, statusFilter, items])
+  }, [logs, keyword, locationFilter, identityFilter, itemFilter, statusFilter, items, isSocialWorker, selfName])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -800,15 +805,17 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
     <div className="container-fluid mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="mb-0">
-          <i className="bi bi-list-ul" /> 物資領用紀錄
+          <i className="bi bi-list-ul" /> {isSocialWorker ? '個人領用紀錄' : '物資領用紀錄'}
         </h2>
         <div className="d-flex gap-2">
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
           </button>
-          <Link className="btn btn-outline-primary" to="/outbound/recipient-analysis">
-            <i className="bi bi-graph-up" /> 查看領取分析
-          </Link>
+          {isAdmin && (
+            <Link className="btn btn-outline-primary" to="/outbound/recipient-analysis">
+              <i className="bi bi-graph-up" /> 查看領取分析
+            </Link>
+          )}
           <Link className="btn btn-primary" to="/outbound/create">
             <i className="bi bi-plus-circle" /> 新增領用
           </Link>

@@ -137,7 +137,9 @@ export function StatusList() {
 
   // 需求方＝登入帳號的據點（固定，不隨品項變）。管理員無據點時才需手選。
   const myLocId: number | null = profile?.location_id ?? null
-  const isAdminOrCadre = profile?.role_name === Roles.Admin || profile?.role_name === Roles.Cadre
+  const isAdmin = profile?.role_name === Roles.Admin
+  const isCadre = profile?.role_name === Roles.Cadre
+  const isAdminOrCadre = isAdmin || isCadre
   // 來源＝物資所在的據點（這列的據點，自動帶入）；總量不足（無所在據點）才需挑選。
   const isGlobalRow = raiseRow != null && raiseRow.locationId == null
   // 物資就在自己據點時無需向自己求援。
@@ -198,6 +200,30 @@ export function StatusList() {
     if (insErr) return setError(insErr.message)
     setRaiseRow(null)
     navigate('/', { state: { flash: `已提出需求：${raiseRow.item_name} ${qty} ${raiseRow.unit ?? ''}` } })
+  }
+
+  // 幫主對已過期的「向總管申請報廢」：沿用舉手（supply_request），type=disposal，指定批次。
+  async function requestDisposal(row: Row) {
+    if (row.id == null || row.locationId == null) return
+    if (!confirm(`向總管申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）？`)) return
+    setError(null)
+    const { error: insErr } = await supabase.from('supply_request').insert({
+      request_type: 'disposal',
+      supply_item_id: row.id,
+      category: row.category,
+      item_name: row.item_name,
+      specification: row.specification,
+      requesting_location_id: row.locationId,
+      quantity: row.quantity ?? 0,
+      requested_by: profile?.display_name ?? profile?.username ?? null,
+      note: '已過期，申請報廢',
+      status: 'Open',
+    })
+    if (insErr) {
+      setError(insErr.message)
+      return
+    }
+    navigate('/', { state: { flash: `已向總管申請報廢：${row.item_name}` } })
   }
 
   if (!isValidStatus(status)) {
@@ -264,18 +290,24 @@ export function StatusList() {
                       <td>{r.expiration ?? (r.stock_type ? <span className={`badge ${stockTypeBadgeClass(r.stock_type)}`}>{stockTypeDisplayName(r.stock_type)}</span> : r.note ?? '—')}</td>
                       <td className="text-center">
                         {status === 'expired' ? (
-                          // 已過期改成直接串接物資報廢（帶入該批次）；報廢限總管/據點管理人員。
-                          isAdminOrCadre && r.id != null ? (
+                          // 已過期：總管直接報廢；幫主向總管申請報廢；小幫手無動作。
+                          isAdmin && r.id != null ? (
                             <Link className="btn btn-sm btn-dark" to={`/disposals/create?supplyItemId=${r.id}`}>
                               <i className="bi bi-trash3" /> 報廢
                             </Link>
+                          ) : isCadre && r.id != null ? (
+                            <button className="btn btn-sm btn-outline-dark" onClick={() => void requestDisposal(r)}>
+                              <i className="bi bi-send" /> 申請報廢
+                            </button>
                           ) : (
                             <span className="text-muted small">—</span>
                           )
-                        ) : (
+                        ) : isAdminOrCadre ? (
                           <button className="btn btn-sm btn-primary" onClick={() => openRaise(r)}>
                             <i className="bi bi-hand-index-thumb" /> 舉手
                           </button>
+                        ) : (
+                          <span className="text-muted small">—</span>
                         )}
                       </td>
                     </tr>

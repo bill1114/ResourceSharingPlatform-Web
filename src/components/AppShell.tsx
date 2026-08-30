@@ -10,6 +10,7 @@ export function AppShell() {
   const { profile, signOut } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
   const isAdminOrCadre = profile?.role_name === Roles.Admin || profile?.role_name === Roles.Cadre
+  const isSocialWorker = profile?.role_name === Roles.SocialWorker
   const { enabled: engineeringMode, setEnabled: setEngineeringMode } = useEngineeringMode()
 
   return (
@@ -46,11 +47,13 @@ export function AppShell() {
                     <i className="bi bi-box" /> 物資管理
                   </a>
                   <ul className="dropdown-menu">
-                    <li>
-                      <NavLink className="dropdown-item" to="/stock-in">
-                        <i className="bi bi-box-arrow-in-down" /> 物資入庫
-                      </NavLink>
-                    </li>
+                    {isAdminOrCadre && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/stock-in">
+                          <i className="bi bi-box-arrow-in-down" /> 物資入庫
+                        </NavLink>
+                      </li>
+                    )}
                     <li>
                       <NavLink className="dropdown-item" to="/outbound/create">
                         <i className="bi bi-box-arrow-up" /> 物資領用
@@ -70,7 +73,7 @@ export function AppShell() {
                         </NavLink>
                       </li>
                     )}
-                    {isAdmin && (
+                    {isAdminOrCadre && (
                       <li>
                         <NavLink className="dropdown-item" to="/ai-stockin/create">
                           <i className="bi bi-stars" /> AI 智慧入庫
@@ -86,24 +89,30 @@ export function AppShell() {
                   <ul className="dropdown-menu">
                     <li>
                       <NavLink className="dropdown-item" to="/outbound">
-                        <i className="bi bi-box-arrow-up" /> 領用紀錄
+                        <i className="bi bi-box-arrow-up" /> {isSocialWorker ? '個人領用紀錄' : '領用紀錄'}
                       </NavLink>
                     </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/donations">
-                        <i className="bi bi-award" /> 捐贈紀錄
-                      </NavLink>
-                    </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/disposals">
-                        <i className="bi bi-trash3" /> 報廢紀錄
-                      </NavLink>
-                    </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/transfers">
-                        <i className="bi bi-arrow-left-right" /> 轉移紀錄
-                      </NavLink>
-                    </li>
+                    {isAdmin && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/donations">
+                          <i className="bi bi-award" /> 捐贈紀錄
+                        </NavLink>
+                      </li>
+                    )}
+                    {isAdminOrCadre && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/disposals">
+                          <i className="bi bi-trash3" /> 報廢紀錄
+                        </NavLink>
+                      </li>
+                    )}
+                    {isAdminOrCadre && (
+                      <li>
+                        <NavLink className="dropdown-item" to="/transfers">
+                          <i className="bi bi-arrow-left-right" /> 轉移紀錄
+                        </NavLink>
+                      </li>
+                    )}
                     {isAdmin && (
                       <li>
                         <NavLink className="dropdown-item" to="/ai-stockin">
@@ -111,17 +120,21 @@ export function AppShell() {
                         </NavLink>
                       </li>
                     )}
-                    <li><hr className="dropdown-divider" /></li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/outbound/recipient-analysis">
-                        <i className="bi bi-graph-up" /> 領取分析
-                      </NavLink>
-                    </li>
-                    <li>
-                      <NavLink className="dropdown-item" to="/donations/donor-analysis">
-                        <i className="bi bi-heart" /> 捐贈分析
-                      </NavLink>
-                    </li>
+                    {isAdmin && (
+                      <>
+                        <li><hr className="dropdown-divider" /></li>
+                        <li>
+                          <NavLink className="dropdown-item" to="/outbound/recipient-analysis">
+                            <i className="bi bi-graph-up" /> 領取分析
+                          </NavLink>
+                        </li>
+                        <li>
+                          <NavLink className="dropdown-item" to="/donations/donor-analysis">
+                            <i className="bi bi-heart" /> 捐贈分析
+                          </NavLink>
+                        </li>
+                      </>
+                    )}
                   </ul>
                 </li>
                 {engineeringMode && (
@@ -131,24 +144,27 @@ export function AppShell() {
                     </NavLink>
                   </li>
                 )}
-                {isAdmin && (
+                {isAdminOrCadre && (
                   <li className="nav-item dropdown">
                     <a className="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
                       <i className="bi bi-gear" /> 系統管理
                     </a>
                     <ul className="dropdown-menu">
-                      {/* p.11：物資清單移入系統管理；p.16：物資明細（調整/報廢異動歷程）。 */}
-                      <li>
-                        <NavLink className="dropdown-item" to="/supply-items">
-                          <i className="bi bi-boxes" /> 物資清單
-                        </NavLink>
-                      </li>
+                      {/* 物資明細開放幫主（可調整）；其餘系統設定僅總管。 */}
+                      {isAdmin && (
+                        <li>
+                          <NavLink className="dropdown-item" to="/supply-items">
+                            <i className="bi bi-boxes" /> 物資清單
+                          </NavLink>
+                        </li>
+                      )}
                       <li>
                         <NavLink className="dropdown-item" to="/item-ledger">
                           <i className="bi bi-clock-history" /> 物資明細
                         </NavLink>
                       </li>
-                      <li><hr className="dropdown-divider" /></li>
+                      {isAdmin && (
+                      <><li><hr className="dropdown-divider" /></li>
                       <li>
                         <NavLink className="dropdown-item" to="/admin/accounts">
                           <i className="bi bi-people" /> 帳號管理
@@ -173,7 +189,8 @@ export function AppShell() {
                         <NavLink className="dropdown-item" to="/admin/ai-settings">
                           <i className="bi bi-stars" /> AI 智慧入庫設定
                         </NavLink>
-                      </li>
+                      </li></>
+                      )}
                     </ul>
                   </li>
                 )}

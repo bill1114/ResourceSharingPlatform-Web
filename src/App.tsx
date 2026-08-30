@@ -51,7 +51,7 @@ function App() {
         <Route
           path="/mobile/vision"
           element={
-            <RoleGate roles={[Roles.Admin]} fallback={<MobileNoAccess />}>
+            <RoleGate roles={[Roles.Admin, Roles.Cadre]} fallback={<MobileNoAccess />}>
               <MobileVision />
             </RoleGate>
           }
@@ -67,9 +67,9 @@ function App() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/status/:status" element={<StatusList />} />
-        <Route path="/supply-items" element={<SupplyItems />} />
-        <Route path="/stock-in" element={<StockIn />} />
-        <Route path="/supply-locations" element={<SupplyLocations />} />
+        <Route path="/supply-items" element={<RoleGate roles={[Roles.Admin]}><SupplyItems /></RoleGate>} />
+        <Route path="/stock-in" element={<RoleGate roles={[Roles.Admin, Roles.Cadre]}><StockIn /></RoleGate>} />
+        <Route path="/supply-locations" element={<RoleGate roles={[Roles.Admin]}><SupplyLocations /></RoleGate>} />
         <Route
           path="/transfers/create"
           element={
@@ -78,12 +78,12 @@ function App() {
             </RoleGate>
           }
         />
-        <Route path="/transfers" element={<SupplyTransferIndex />} />
+        <Route path="/transfers" element={<RoleGate roles={[Roles.Admin, Roles.Cadre]}><SupplyTransferIndex /></RoleGate>} />
         <Route path="/outbound/create" element={<SupplyOutboundCreate />} />
         <Route path="/outbound" element={<SupplyOutboundIndex />} />
-        <Route path="/outbound/recipient-analysis" element={<RecipientAnalysis />} />
-        <Route path="/donations/donor-analysis" element={<DonorAnalysis />} />
-        <Route path="/donations" element={<SupplyDonationIndex />} />
+        <Route path="/outbound/recipient-analysis" element={<RoleGate roles={[Roles.Admin]}><RecipientAnalysis /></RoleGate>} />
+        <Route path="/donations/donor-analysis" element={<RoleGate roles={[Roles.Admin]}><DonorAnalysis /></RoleGate>} />
+        <Route path="/donations" element={<RoleGate roles={[Roles.Admin]}><SupplyDonationIndex /></RoleGate>} />
         <Route
           path="/disposals/create"
           element={
@@ -92,11 +92,11 @@ function App() {
             </RoleGate>
           }
         />
-        <Route path="/disposals" element={<SupplyDisposalIndex />} />
+        <Route path="/disposals" element={<RoleGate roles={[Roles.Admin, Roles.Cadre]}><SupplyDisposalIndex /></RoleGate>} />
         <Route
           path="/item-ledger"
           element={
-            <RoleGate roles={[Roles.Admin]}>
+            <RoleGate roles={[Roles.Admin, Roles.Cadre]}>
               <ItemLedger />
             </RoleGate>
           }
@@ -104,7 +104,7 @@ function App() {
         <Route
           path="/ai-stockin/create"
           element={
-            <RoleGate roles={[Roles.Admin]}>
+            <RoleGate roles={[Roles.Admin, Roles.Cadre]}>
               <AIStockInCreate />
             </RoleGate>
           }

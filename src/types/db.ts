@@ -173,6 +173,8 @@ export interface SupplyRequest {
   source_location_id: number | null
   quantity: number
   status: string // Open / Fulfilled / Cancelled
+  request_type: 'supply' | 'disposal' // supply=缺料舉手；disposal=申請報廢
+  supply_item_id: number | null // 報廢申請指定的批次
   requested_by: string | null
   note: string | null
   fulfilled_transfer_batch_id: string | null
