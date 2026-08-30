@@ -313,6 +313,8 @@ export function SupplyDisposalCreate() {
 }
 
 export function SupplyDisposalIndex() {
+  const { profile } = useAuth()
+  const isAdmin = profile?.role_name === Roles.Admin
   const [logs, setLogs] = useState<SupplyDisposalLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
@@ -389,9 +391,12 @@ export function SupplyDisposalIndex() {
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filteredLogs.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
           </button>
-          <Link className="btn btn-primary" to="/disposals/create">
-            <i className="bi bi-plus-circle" /> 新增報廢
-          </Link>
+          {/* 報廢建立僅總管；幫主／小幫手改用「舉手／申請報廢」，此處直接隱藏。 */}
+          {isAdmin && (
+            <Link className="btn btn-primary" to="/disposals/create">
+              <i className="bi bi-plus-circle" /> 新增報廢
+            </Link>
+          )}
         </div>
       </div>
       <FlashMessage />
