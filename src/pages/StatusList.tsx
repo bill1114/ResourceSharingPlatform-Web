@@ -296,8 +296,8 @@ export function StatusList() {
                               <i className="bi bi-trash3" /> 報廢
                             </Link>
                           ) : isCadre && r.id != null ? (
-                            <button className="btn btn-sm btn-outline-dark" onClick={() => void requestDisposal(r)}>
-                              <i className="bi bi-send" /> 申請報廢
+                            <button className="btn btn-sm btn-primary" onClick={() => void requestDisposal(r)}>
+                              <i className="bi bi-hand-index-thumb" /> 舉手
                             </button>
                           ) : (
                             <span className="text-muted small">—</span>
