@@ -254,7 +254,7 @@ export function SupplyItemForm({
             value={catalog.variantId ?? ''}
             onChange={(e) => catalog.setVariantId(e.target.value ? Number(e.target.value) : null)}
           >
-            <option value="">請先選擇物資名稱</option>
+            <option value="">{catalog.itemName ? '無（未指定，可稍後由總管補規格）' : '請先選擇物資名稱'}</option>
             {catalog.specVariants.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.specification ?? '無規格'}

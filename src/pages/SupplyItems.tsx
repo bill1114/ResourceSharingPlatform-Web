@@ -50,6 +50,9 @@ export function SupplyItems() {
   const [searchParams] = useSearchParams()
   const [items, setItems] = useState<SupplyItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
+  // 目錄定義 + 規格：編輯時補規格用（依 種類+名稱 找定義，列出其規格）。
+  const [definitions, setDefinitions] = useState<{ id: number; category: string; item_name: string }[]>([])
+  const [variants, setVariants] = useState<{ id: number; inventory_item_definition_id: number; specification: string | null; is_active: boolean }[]>([])
   const [lowStock, setLowStock] = useState<LowStockData>(emptyLowStock)
   // 總量不足（全系統）判斷用：global_low_stock_view 的 種類|名稱|規格 集合。
   const [globalLowKeys, setGlobalLowKeys] = useState<Set<string>>(new Set())
@@ -60,9 +63,16 @@ export function SupplyItems() {
   const [photoPreview, setPhotoPreview] = useState<SupplyItem | null>(null)
   const [detailsItem, setDetailsItem] = useState<SupplyItem | null>(null)
   const [editItem, setEditItem] = useState<SupplyItem | null>(null)
-  const [editForm, setEditForm] = useState({ quantity: '', expirationDate: '', safetyStock: '', remark: '' })
+  const [editForm, setEditForm] = useState({ quantity: '', expirationDate: '', safetyStock: '', remark: '', variantId: '' })
   const [editPhoto, setEditPhoto] = useState<File | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+
+  // 這筆物資對應的定義底下、可選的規格（供編輯補規格）。
+  function variantsFor(item: SupplyItem) {
+    const def = definitions.find((d) => d.category === item.category && d.item_name === item.item_name)
+    if (!def) return [] as { id: number; specification: string | null }[]
+    return variants.filter((v) => v.inventory_item_definition_id === def.id && v.is_active)
+  }
 
   function openEdit(item: SupplyItem) {
     setEditItem(item)
@@ -71,6 +81,7 @@ export function SupplyItems() {
       expirationDate: item.expiration_date ?? '',
       safetyStock: String(item.safety_stock),
       remark: item.remark ?? '',
+      variantId: item.inventory_item_variant_id ? String(item.inventory_item_variant_id) : '',
     })
     setEditPhoto(null)
   }
@@ -93,6 +104,9 @@ export function SupplyItems() {
       imagePath = path
     }
 
+    // 規格補登：依選到的規格帶入 variant id 與規格文字（選「無」則清空）。
+    const chosenVariant = editForm.variantId ? variants.find((v) => v.id === Number(editForm.variantId)) : null
+
     const { error: updErr } = await supabase
       .from('supply_item')
       .update({
@@ -100,6 +114,8 @@ export function SupplyItems() {
         expiration_date: editItem.stock_type === StockTypes.NoExpiry ? null : editForm.expirationDate || null,
         safety_stock: Number(editForm.safetyStock) || 0,
         remark: editForm.remark.trim() || null,
+        inventory_item_variant_id: chosenVariant ? chosenVariant.id : null,
+        specification: chosenVariant ? chosenVariant.specification : null,
         image_path: imagePath,
         updated_by: profile?.display_name ?? profile?.username ?? null,
         updated_at: new Date().toISOString(),
@@ -132,15 +148,19 @@ export function SupplyItems() {
 
   async function load() {
     setLoading(true)
-    const [itemsRes, locRes, low, globalRes] = await Promise.all([
+    const [itemsRes, locRes, low, globalRes, defRes, varRes] = await Promise.all([
       supabase.from('supply_item').select('*').eq('is_active', true).order('id', { ascending: false }),
       supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
       fetchLowStock(),
       supabase.from('global_low_stock_view').select('category, item_name, specification'),
+      supabase.from('inventory_item_definition').select('id, category, item_name'),
+      supabase.from('inventory_item_variant').select('id, inventory_item_definition_id, specification, is_active'),
     ])
     if (itemsRes.error) setError(itemsRes.error.message)
     setItems((itemsRes.data ?? []) as SupplyItem[])
     setLocations((locRes.data ?? []) as SupplyLocation[])
+    setDefinitions((defRes.data ?? []) as { id: number; category: string; item_name: string }[])
+    setVariants((varRes.data ?? []) as { id: number; inventory_item_definition_id: number; specification: string | null; is_active: boolean }[])
     setLowStock(low)
     setGlobalLowKeys(
       new Set(
@@ -665,6 +685,16 @@ export function SupplyItems() {
                         onChange={(e) => setEditForm({ ...editForm, safetyStock: e.target.value })}
                       />
                     </div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">規格</label>
+                    <select className="form-select" value={editForm.variantId} onChange={(e) => setEditForm({ ...editForm, variantId: e.target.value })}>
+                      <option value="">無（未指定）</option>
+                      {variantsFor(editItem).map((v) => (
+                        <option key={v.id} value={v.id}>{v.specification ?? '無規格'}</option>
+                      ))}
+                    </select>
+                    <div className="form-text">入庫時未指定規格的物資，總管在「庫存種類設定」新增規格後，可在此補上分類。</div>
                   </div>
                   {editItem.stock_type !== StockTypes.NoExpiry && (
                     <div className="mb-3">
