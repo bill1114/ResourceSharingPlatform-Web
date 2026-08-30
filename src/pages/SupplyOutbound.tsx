@@ -26,6 +26,8 @@ import {
 } from '../components/OutboundModals'
 import { fetchExpiringItems, expiryAlert } from '../lib/stockBatch'
 import { FlashMessage } from '../components/FlashMessage'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+ import { withinRange } from '../lib/dateRange'
 import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation, SupplyOutboundLog } from '../types/db'
 
@@ -525,6 +527,8 @@ export function SupplyOutboundIndex() {
   const [identityFilter, setIdentityFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'cancelled'>('')
   const [itemFilter, setItemFilter] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [loading, setLoading] = useState(true)
   // 取消領用
   const [cancelTarget, setCancelTarget] = useState<SupplyOutboundLog | null>(null)
@@ -751,6 +755,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
   const filtered = useMemo(() => {
     return logs.filter((l) => {
       if (isSocialWorker && l.operator !== selfName) return false
+      if (!withinRange(l.outbound_time, fromDate, toDate)) return false
       if (locationFilter && l.location_id !== Number(locationFilter)) return false
       if (identityFilter && l.recipient_identity !== identityFilter) return false
       if (itemFilter && itemNameOf(l.supply_item_id) !== itemFilter) return false
@@ -773,7 +778,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logs, keyword, locationFilter, identityFilter, itemFilter, statusFilter, items, isSocialWorker, selfName])
+  }, [logs, keyword, locationFilter, identityFilter, itemFilter, statusFilter, fromDate, toDate, items, isSocialWorker, selfName])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -879,6 +884,10 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                 <option value="cancelled">已取消</option>
               </select>
             </div>
+            <div className="col-md-4">
+              <label className="form-label">領用日期區間</label>
+              <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+            </div>
             <div className="col-md-4 d-flex align-items-end">
               <button
                 type="button"
@@ -889,6 +898,8 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                   setIdentityFilter('')
                   setItemFilter('')
                   setStatusFilter('')
+                  setFromDate('')
+                  setToDate('')
                 }}
               >
                 <i className="bi bi-arrow-clockwise" /> 重設

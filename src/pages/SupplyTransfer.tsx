@@ -9,6 +9,8 @@ import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import { OutboundItemPickerModal } from '../components/OutboundModals'
 import { expiryAlert } from '../lib/stockBatch'
 import { exportToExcel } from '../lib/excelExport'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+ import { withinRange } from '../lib/dateRange'
 import type { SupplyItem, SupplyLocation, SupplyTransferLog, SupplyRequest } from '../types/db'
 
 // 轉移清單改為與出庫相同的概念：每一列存整個物資批次物件（顯示效期／規格／現有），
@@ -334,6 +336,8 @@ export function SupplyTransferIndex() {
   const [keyword, setKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [message, setMessage] = useState<{ type: 'success' | 'danger'; text: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -356,13 +360,14 @@ export function SupplyTransferIndex() {
     return logs.filter((x) => {
       if (statusFilter && x.status !== statusFilter) return false
       if (locationFilter && x.from_location_id !== Number(locationFilter) && x.to_location_id !== Number(locationFilter)) return false
+      if (!withinRange(x.transfer_time, fromDate, toDate)) return false
       if (k) {
         const item = items.find((i) => i.id === x.supply_item_id)
         if (![item?.item_name, x.operator, x.remark].some((v) => (v ?? '').toLowerCase().includes(k))) return false
       }
       return true
     })
-  }, [logs, items, keyword, statusFilter, locationFilter])
+  }, [logs, items, keyword, statusFilter, locationFilter, fromDate, toDate])
 
   async function resolve(functionName: 'transfer-confirm' | 'transfer-cancel', logId: number) {
     setMessage(null)
@@ -404,7 +409,8 @@ export function SupplyTransferIndex() {
         <option value="">全部據點</option>
         {locations.map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
       </select></div>
-      <div className="col-md-2 d-flex align-items-end"><button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setStatusFilter(''); setLocationFilter('') }}><i className="bi bi-arrow-clockwise" /> 重設</button></div>
+      <div className="col-md-4"><label className="form-label">轉移日期區間</label><DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} /></div>
+      <div className="col-md-2 d-flex align-items-end"><button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setStatusFilter(''); setLocationFilter(''); setFromDate(''); setToDate('') }}><i className="bi bi-arrow-clockwise" /> 重設</button></div>
     </div></div></div>
     <div className="card shadow-sm"><div className="card-body"><div className="table-responsive"><table className="table table-hover align-middle">
       <thead className="table-light"><tr><th>轉移時間</th><th>物資</th><th>來源</th><th /><th>目標</th><th>數量</th><th>狀態</th><th>操作人員</th><th>備註</th><th>動作</th></tr></thead>

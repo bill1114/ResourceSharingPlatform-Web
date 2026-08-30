@@ -6,6 +6,8 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { FlashMessage } from '../components/FlashMessage'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+ import { withinRange } from '../lib/dateRange'
 import { exportToExcel } from '../lib/excelExport'
 import type { SupplyItem, SupplyLocation, SupplyStockInLog } from '../types/db'
 
@@ -26,6 +28,8 @@ export function SupplyDonationIndex() {
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [filledFilter, setFilledFilter] = useState('') // '' 全部 / filled 已填捐贈人 / empty 待補登
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,6 +67,7 @@ export function SupplyDonationIndex() {
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       if (locationFilter && log.location_id !== Number(locationFilter)) return false
+      if (!withinRange(log.stock_in_time, fromDate, toDate)) return false
       if (filledFilter === 'filled' && !log.donor_name) return false
       if (filledFilter === 'empty' && log.donor_name) return false
       if (keyword.trim()) {
@@ -78,7 +83,7 @@ export function SupplyDonationIndex() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logs, keyword, locationFilter, filledFilter, items])
+  }, [logs, keyword, locationFilter, filledFilter, fromDate, toDate, items])
 
   function handleExport() {
     exportToExcel<SupplyStockInLog>('捐贈紀錄', '捐贈紀錄', [
@@ -186,8 +191,12 @@ export function SupplyDonationIndex() {
                 ))}
               </select>
             </div>
+            <div className="col-md-4">
+              <label className="form-label">入庫日期區間</label>
+              <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+            </div>
             <div className="col-md-2 d-flex align-items-end">
-              <button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setLocationFilter(''); setFilledFilter('') }}>
+              <button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setLocationFilter(''); setFilledFilter(''); setFromDate(''); setToDate('') }}>
                 <i className="bi bi-arrow-clockwise" /> 重設
               </button>
             </div>

@@ -10,6 +10,8 @@ import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { exportToExcel } from '../lib/excelExport'
 import { FlashMessage } from '../components/FlashMessage'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+ import { withinRange } from '../lib/dateRange'
 import type { SupplyLocation } from '../types/db'
 
 interface LedgerItem {
@@ -63,6 +65,8 @@ export function ItemLedger() {
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   // 調整（盤點修正）視窗
   const [adjustItem, setAdjustItem] = useState<LedgerItem | null>(null)
@@ -162,10 +166,11 @@ export function ItemLedger() {
     return entries.filter((e) => {
       if (locationFilter && e.locationId !== Number(locationFilter)) return false
       if (typeFilter && e.type !== typeFilter) return false
+      if (!withinRange(e.time, fromDate, toDate)) return false
       if (k && !`${e.category} ${e.itemName} ${e.specification ?? ''}`.toLowerCase().includes(k)) return false
       return true
     })
-  }, [entries, keyword, locationFilter, typeFilter])
+  }, [entries, keyword, locationFilter, typeFilter, fromDate, toDate])
 
   function handleExport() {
     exportToExcel<LedgerEntry>('物資明細', '物資明細', [
@@ -267,8 +272,12 @@ export function ItemLedger() {
                 ))}
               </select>
             </div>
+            <div className="col-md-4">
+              <label className="form-label">異動日期區間</label>
+              <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+            </div>
             <div className="col-md-2 d-flex align-items-end">
-              <button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setLocationFilter(''); setTypeFilter('') }}>
+              <button type="button" className="btn btn-secondary w-100" onClick={() => { setKeyword(''); setLocationFilter(''); setTypeFilter(''); setFromDate(''); setToDate('') }}>
                 <i className="bi bi-arrow-clockwise" /> 重設
               </button>
             </div>

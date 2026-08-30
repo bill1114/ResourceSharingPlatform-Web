@@ -16,6 +16,8 @@ import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
 import { exportToExcel } from '../lib/excelExport'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+ import { withinRange } from '../lib/dateRange'
 import type { SupplyItem, SupplyLocation, DonationSource } from '../types/db'
 
 interface DonationRow {
@@ -76,6 +78,8 @@ export function DonorAnalysis() {
   const [keyword, setKeyword] = useState('')
   const [itemFilter, setItemFilter] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -123,11 +127,12 @@ export function DonorAnalysis() {
     return donations.filter((d) => {
       if (itemFilter && itemNameOf(d.supplyItemId) !== itemFilter) return false
       if (locationFilter && d.locationId !== Number(locationFilter)) return false
+      if (!withinRange(d.time, fromDate, toDate)) return false
       if (k && !`${d.donorName} ${d.donorContact}`.toLowerCase().includes(k)) return false
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [donations, keyword, itemFilter, locationFilter, items])
+  }, [donations, keyword, itemFilter, locationFilter, fromDate, toDate, items])
 
   // 依捐贈人彙總 + 物流追蹤
   const groups = useMemo<DonorGroup[]>(() => {
@@ -192,6 +197,8 @@ export function DonorAnalysis() {
     setKeyword('')
     setItemFilter('')
     setLocationFilter('')
+    setFromDate('')
+    setToDate('')
   }
 
   function handleExport() {
@@ -274,6 +281,10 @@ export function DonorAnalysis() {
                   <option key={l.id} value={l.id}>{l.location_name}</option>
                 ))}
               </select>
+            </div>
+            <div className="col-md-4">
+              <label className="form-label">捐贈日期區間</label>
+              <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
             </div>
             <div className="col-md-2 d-flex align-items-end">
               <button type="button" className="btn btn-secondary w-100" onClick={resetFilters}>

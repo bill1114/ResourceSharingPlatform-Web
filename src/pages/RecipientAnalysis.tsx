@@ -16,6 +16,8 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
 import { AnalysisFilterModal } from '../components/AnalysisFilterModal'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+ import { withinRange } from '../lib/dateRange'
 import { exportToExcel } from '../lib/excelExport'
 import {
   AllFilterFields,
@@ -59,6 +61,8 @@ export function RecipientAnalysis() {
   const [editing, setEditing] = useState<AnalysisFilter | null>(null)
   const [detailOverride, setDetailOverride] = useState<FilterField | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -80,8 +84,11 @@ export function RecipientAnalysis() {
     [items]
   )
 
-  // 已取消的不列入任何統計。
-  const activeLogs = useMemo(() => logs.filter((l) => !l.is_cancelled), [logs])
+  // 已取消的不列入任何統計；再套用日期區間。
+  const activeLogs = useMemo(
+    () => logs.filter((l) => !l.is_cancelled && withinRange(l.outbound_time, fromDate, toDate)),
+    [logs, fromDate, toDate]
+  )
 
   const valueOf = useCallback(
     (log: SupplyOutboundLog, field: FilterField): string => {
@@ -262,6 +269,17 @@ export function RecipientAnalysis() {
           >
             <i className="bi bi-funnel" /> 新增篩選條件
           </button>
+        </div>
+      </div>
+
+      {/* ---------- 日期區間 ---------- */}
+      <div className="card shadow-sm mb-3">
+        <div className="card-body d-flex flex-wrap align-items-center gap-3">
+          <span className="fw-bold"><i className="bi bi-calendar-range" /> 領取日期區間</span>
+          <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+          {(fromDate || toDate) && (
+            <button className="btn btn-sm btn-outline-secondary" onClick={() => { setFromDate(''); setToDate('') }}>清除日期</button>
+          )}
         </div>
       </div>
 

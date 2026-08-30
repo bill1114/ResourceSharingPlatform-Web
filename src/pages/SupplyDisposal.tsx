@@ -11,6 +11,8 @@ import { functionErrorMessage } from '../lib/functionError'
 import { locationColorStyle } from '../lib/colors'
 import { Roles, AllDisposalReasons, disposalReasonDisplayName, disposalReasonBadgeClass, DisposalReasons } from '../lib/enums'
 import { ExpiringItemsPanel, StockBatchPicker } from '../components/StockBatchPicker'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+ import { withinRange } from '../lib/dateRange'
 import { fetchExpiringItems, isExpired } from '../lib/stockBatch'
 import { FlashMessage } from '../components/FlashMessage'
 import { ConfirmActionModal } from '../components/ConfirmActionModal'
@@ -317,6 +319,8 @@ export function SupplyDisposalIndex() {
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [reasonFilter, setReasonFilter] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -343,6 +347,7 @@ export function SupplyDisposalIndex() {
     return logs.filter((log) => {
       if (locationFilter && log.location_id !== Number(locationFilter)) return false
       if (reasonFilter && log.reason !== reasonFilter) return false
+      if (!withinRange(log.disposal_time, fromDate, toDate)) return false
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase()
         const matches =
@@ -354,7 +359,7 @@ export function SupplyDisposalIndex() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logs, keyword, locationFilter, reasonFilter, items])
+  }, [logs, keyword, locationFilter, reasonFilter, fromDate, toDate, items])
 
   function locationName(id: number): string {
     return locations.find((l) => l.id === id)?.location_name ?? `#${id}`
@@ -422,6 +427,10 @@ export function SupplyDisposalIndex() {
                 ))}
               </select>
             </div>
+            <div className="col-md-4">
+              <label className="form-label">報廢日期區間</label>
+              <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+            </div>
             <div className="col-md-2 d-flex align-items-end">
               <button
                 type="button"
@@ -430,6 +439,8 @@ export function SupplyDisposalIndex() {
                   setKeyword('')
                   setLocationFilter('')
                   setReasonFilter('')
+                  setFromDate('')
+                  setToDate('')
                 }}
               >
                 <i className="bi bi-arrow-clockwise" /> 重設
