@@ -11,6 +11,7 @@ import { Roles, StockTypes, AllStockTypes, stockTypeDisplayName, stockTypeBadgeC
 import { locationColorStyle } from '../lib/colors'
 import { FlashMessage } from '../components/FlashMessage'
 import { exportToExcel } from '../lib/excelExport'
+import { DateSelect } from '../components/DateSelect'
 import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
@@ -668,14 +669,7 @@ export function SupplyItems() {
                   {editItem.stock_type !== StockTypes.NoExpiry && (
                     <div className="mb-3">
                       <label className="form-label">有效期限</label>
-                      <input
-                        className="form-control"
-                        type="date"
-                        min="2000-01-01"
-                        max="2100-12-31"
-                        value={editForm.expirationDate}
-                        onChange={(e) => setEditForm({ ...editForm, expirationDate: e.target.value })}
-                      />
+                      <DateSelect value={editForm.expirationDate} onChange={(v) => setEditForm({ ...editForm, expirationDate: v })} />
                     </div>
                   )}
                   <div className="mb-3">

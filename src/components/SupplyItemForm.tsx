@@ -10,6 +10,7 @@ import { uploadItemPhoto } from '../lib/imageUpload'
 import { StockTypes, AllStockTypes, stockTypeDisplayName, Roles } from '../lib/enums'
 import { useAuth } from '../hooks/useAuth'
 import { ConfirmActionModal } from './ConfirmActionModal'
+import { DateSelect } from './DateSelect'
 import type { SupplyLocation, LocationInventorySafetyStock } from '../types/db'
 
 type FormState = {
@@ -284,15 +285,7 @@ export function SupplyItemForm({
       {stockType !== StockTypes.NoExpiry && (
         <div className="mb-3">
           <label className="form-label">有效期限 *</label>
-          <input
-            className="form-control"
-            type="date"
-            required
-            min="2000-01-01"
-            max="2100-12-31"
-            value={form.expirationDate}
-            onChange={(e) => setForm({ ...form, expirationDate: e.target.value })}
-          />
+          <DateSelect value={form.expirationDate} onChange={(v) => setForm({ ...form, expirationDate: v })} />
         </div>
       )}
 
