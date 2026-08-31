@@ -139,9 +139,10 @@ export function StatusList() {
   const myLocId: number | null = profile?.location_id ?? null
   const isAdmin = profile?.role_name === Roles.Admin
   const isCadre = profile?.role_name === Roles.Cadre
-  // 非總管只能對「自己據點」的品項舉手；全系統列（總量不足，locationId=null）可為自己據點提出。
-  // 小幫手完全無操作。看得到別的據點，但不能操作 —— 對應既有權限設計。
-  const canOperateRow = (r: Row) => isAdmin || (isCadre && (r.locationId == null || r.locationId === myLocId))
+  // 舉手／申請報廢是「送需求給總管審核」的請求功能（非直接動別據點庫存），
+  // 依權限設計：總管與幫主可用，小幫手無。看得到全部據點，但直接操作（如物資
+  // 明細「調整」）另在各頁鎖自己據點。
+  const isAdminOrCadre = isAdmin || isCadre
   // 來源＝物資所在的據點（這列的據點，自動帶入）；總量不足（無所在據點）才需挑選。
   const isGlobalRow = raiseRow != null && raiseRow.locationId == null
   // 物資就在自己據點時無需向自己求援。
@@ -292,20 +293,19 @@ export function StatusList() {
                       <td>{r.expiration ?? (r.stock_type ? <span className={`badge ${stockTypeBadgeClass(r.stock_type)}`}>{stockTypeDisplayName(r.stock_type)}</span> : r.note ?? '—')}</td>
                       <td className="text-center">
                         {status === 'expired' ? (
-                          // 已過期：總管直接報廢（不限據點）；幫主僅能對「自己據點」的過期品項申請報廢；
-                          // 小幫手無動作。看得到別據點但不能操作。
+                          // 已過期：總管直接報廢；幫主向總管申請報廢（請求，非直接操作）；小幫手無動作。
                           isAdmin && r.id != null ? (
                             <Link className="btn btn-sm btn-dark" to={`/disposals/create?supplyItemId=${r.id}`}>
                               <i className="bi bi-trash3" /> 報廢
                             </Link>
-                          ) : isCadre && r.id != null && r.locationId === myLocId ? (
+                          ) : isCadre && r.id != null ? (
                             <button className="btn btn-sm btn-primary" onClick={() => void requestDisposal(r)}>
                               <i className="bi bi-hand-index-thumb" /> 舉手
                             </button>
                           ) : (
                             <span className="text-muted small">—</span>
                           )
-                        ) : canOperateRow(r) ? (
+                        ) : isAdminOrCadre ? (
                           <button className="btn btn-sm btn-primary" onClick={() => openRaise(r)}>
                             <i className="bi bi-hand-index-thumb" /> 舉手
                           </button>
