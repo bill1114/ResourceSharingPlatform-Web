@@ -854,7 +854,8 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
               <label className="form-label">據點</label>
               <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
                 <option value="">全部據點</option>
-                {locations.map((l) => (
+                {/* 篩選只列使用中的據點；已停用據點不再出現（歷史紀錄的名稱仍可解析）。 */}
+                {locations.filter((l) => l.is_active !== false).map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.location_name}
                   </option>

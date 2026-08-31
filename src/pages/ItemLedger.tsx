@@ -35,7 +35,8 @@ interface LedgerEntry {
   itemName: string
   specification: string | null
   unit: string | null
-  currentQty: number
+  currentQty: number // 該批次目前（最終）數量
+  runningQty: number // 本筆異動後的當下數量（依時間累加）
   locationId: number
   time: string
   type: LedgerType
@@ -104,6 +105,7 @@ export function ItemLedger() {
       specification: it.specification,
       unit: it.unit,
       currentQty: it.quantity,
+      runningQty: 0,
       locationId: it.location_id,
     })
 
@@ -151,6 +153,16 @@ export function ItemLedger() {
     // 依「批次(id) 由大到小，同批次內時間由早到晚」排序，讓每筆物資的異動聚在一起、第一筆是入庫。
     list.sort((x, y) => (x.itemId !== y.itemId ? y.itemId - x.itemId : x.time < y.time ? -1 : x.time > y.time ? 1 : 0))
 
+    // 目前數量＝依時間累加各筆增減後的當下數量（轉移以文字呈現、不計入加減）。
+    // 同批次內時間相同的多筆，用 list 內原始順序累加即可。
+    let runId: number | null = null
+    let run = 0
+    for (const e of list) {
+      if (e.itemId !== runId) { runId = e.itemId; run = 0 }
+      run += e.delta ?? 0
+      e.runningQty = run
+    }
+
     setItems(itemList)
     setLocations(locs)
     setEntries(list)
@@ -181,7 +193,7 @@ export function ItemLedger() {
       { header: '類型', value: (e) => e.type },
       { header: '增減數量', value: (e) => (e.delta == null ? '' : e.delta) },
       { header: '說明', value: (e) => e.detail },
-      { header: '目前數量', value: (e) => e.currentQty },
+      { header: '目前數量', value: (e) => e.runningQty },
       { header: '所在據點', value: (e) => locationName(e.locationId) },
       { header: '時間', value: (e) => new Date(e.time).toLocaleString('zh-TW') },
       { header: '操作人', value: (e) => e.operator ?? '' },
@@ -320,7 +332,7 @@ export function ItemLedger() {
                         {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta}` : e.delta} {e.delta == null ? '' : e.unit ?? ''}
                       </td>
                       <td>{e.detail}</td>
-                      <td className="col-min text-end">{e.currentQty} {e.unit ?? ''}</td>
+                      <td className="col-min text-end">{e.runningQty} {e.unit ?? ''}</td>
                       <td className="col-min">
                         <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
                       </td>
