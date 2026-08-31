@@ -7,40 +7,31 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { statusColorMap, statusCardStyle, AllDashboardStatuses, type DashboardStatusKey } from '../lib/statusColors'
-import { fetchLowStock, isItemLowStock } from '../lib/lowStock'
 import { FlashMessage } from '../components/FlashMessage'
 import { useAuth } from '../hooks/useAuth'
 import { Roles } from '../lib/enums'
 import { functionErrorMessage } from '../lib/functionError'
 import type { SupplyLocation, SupplyRequest } from '../types/db'
 
-interface LowStockRow {
-  location_id?: number
-  inventory_item_definition_id: number
-  inventory_item_variant_id?: number
-  category: string
-  item_name: string
-  specification?: string | null
-  unit: string
-  safety_stock?: number
-  global_safety_stock?: number
+// 戰情總覽全域彙總（分工單 #2/#3）：改讀 dashboard_location_status /
+// dashboard_summary（SECURITY DEFINER、只回統計數字），讓全部角色看到一致的
+// 全部據點狀態，不再受「非總管只看自己據點」的 RLS 影響。
+interface LocationStatusRow {
+  location_id: number
+  location_name: string
+  is_active: boolean
+  item_type_count: number
   total_quantity: number
+  low_stock_count: number
+  expiring_soon_count: number
+  expired_count: number
 }
 
-interface ExpiringRow {
-  id: number
-  item_name: string
-  category: string
-  specification: string | null
-  quantity: number
-  unit: string | null
-  expiration_date: string
-  location_id: number
-}
-
-interface ResolvedRow {
-  location_id: number
-  resolved_definition_id: number | null
+interface SummaryRow {
+  low_stock_total: number
+  expiring_total: number
+  expired_total: number
+  global_low_total: number
 }
 
 interface LocationSummary {
@@ -57,11 +48,9 @@ export function Dashboard() {
   const isAdmin = profile?.role_name === Roles.Admin
   const isAdminOrCadre = isAdmin || profile?.role_name === Roles.Cadre
   const [locations, setLocations] = useState<SupplyLocation[]>([])
-  // 據點低庫存改為「數實際低庫存的物資批次」(與狀態清單、物資清單一致)，
-  // 不再數 location_low_stock_view 的門檻筆數(會含沒貨的、與清單對不起來)。
   const [lowStockItemCount, setLowStockItemCount] = useState(0)
-  const [globalLowStock, setGlobalLowStock] = useState<LowStockRow[]>([])
-  const [expiringSoon, setExpiringSoon] = useState<ExpiringRow[]>([])
+  const [globalLowStockCount, setGlobalLowStockCount] = useState(0)
+  const [expiringSoonCount, setExpiringSoonCount] = useState(0)
   const [expiredCount, setExpiredCount] = useState(0)
   const [locationSummaries, setLocationSummaries] = useState<LocationSummary[]>([])
   const [requests, setRequests] = useState<SupplyRequest[]>([])
@@ -69,54 +58,36 @@ export function Dashboard() {
 
   async function load() {
       setLoading(true)
-      const todayStr = new Date().toISOString().slice(0, 10)
-      const in30Str = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
 
-      const [locRes, resolvedRes, allItemsRes, low, globalLowRes, expiringRes, expiredRes, reqRes] = await Promise.all([
-        supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
-        supabase.from('supply_item_resolved').select('location_id, resolved_definition_id'),
-        supabase.from('supply_item').select('id, location_id, quantity').eq('is_active', true),
-        fetchLowStock(),
-        supabase.from('global_low_stock_view').select('*'),
-        supabase
-          .from('supply_item')
-          .select('id, item_name, category, specification, quantity, unit, expiration_date, location_id')
-          .eq('is_active', true)
-          .gte('expiration_date', todayStr)
-          .lte('expiration_date', in30Str)
-          .order('expiration_date'),
-        supabase
-          .from('supply_item')
-          .select('id', { count: 'exact', head: true })
-          .eq('is_active', true)
-          .lt('expiration_date', todayStr),
+      const [statusRes, summaryRes, locRes, reqRes] = await Promise.all([
+        supabase.from('dashboard_location_status').select('*').order('location_id'),
+        supabase.from('dashboard_summary').select('*').maybeSingle(),
+        supabase.from('supply_location').select('*'),
         supabase.from('supply_request').select('*').eq('status', 'Open').order('created_at', { ascending: false }),
       ])
 
-      const locs = (locRes.data ?? []) as SupplyLocation[]
-      const resolved = (resolvedRes.data ?? []) as ResolvedRow[]
-      const allItems = (allItemsRes.data ?? []) as { id: number; location_id: number; quantity: number }[]
-      // 實際低庫存的物資批次(與狀態清單同一套判斷)。
-      const lowItems = allItems.filter((it) => isItemLowStock(it, low))
+      const statusRows = (statusRes.data ?? []) as LocationStatusRow[]
+      const summary = (summaryRes.data ?? null) as SummaryRow | null
 
-      setLocations(locs)
-      setLowStockItemCount(lowItems.length)
-      setGlobalLowStock((globalLowRes.data ?? []) as LowStockRow[])
-      setExpiringSoon((expiringRes.data ?? []) as ExpiringRow[])
-      setExpiredCount(expiredRes.count ?? 0)
+      setLocations((locRes.data ?? []) as SupplyLocation[])
+      setLowStockItemCount(summary?.low_stock_total ?? 0)
+      setGlobalLowStockCount(summary?.global_low_total ?? 0)
+      setExpiringSoonCount(summary?.expiring_total ?? 0)
+      setExpiredCount(summary?.expired_total ?? 0)
       setRequests((reqRes.data ?? []) as SupplyRequest[])
 
+      // 各據點統計：只列使用中的據點，數字全域一致（不受角色 RLS 影響）。
       setLocationSummaries(
-        locs.map((location) => ({
-          locationId: location.id,
-          locationName: location.location_name,
-          itemTypeCount: new Set(
-            resolved.filter((r) => r.location_id === location.id && r.resolved_definition_id != null).map((r) => r.resolved_definition_id)
-          ).size,
-          totalQuantity: allItems.filter((i) => i.location_id === location.id).reduce((sum, i) => sum + i.quantity, 0),
-          lowStockCount: lowItems.filter((i) => i.location_id === location.id).length,
-          expiringSoonCount: (expiringRes.data ?? []).filter((r) => (r as ExpiringRow).location_id === location.id).length,
-        }))
+        statusRows
+          .filter((r) => r.is_active)
+          .map((r) => ({
+            locationId: r.location_id,
+            locationName: r.location_name,
+            itemTypeCount: r.item_type_count,
+            totalQuantity: r.total_quantity,
+            lowStockCount: r.low_stock_count,
+            expiringSoonCount: r.expiring_soon_count,
+          }))
       )
 
       setLoading(false)
@@ -176,8 +147,8 @@ export function Dashboard() {
           const c = statusColorMap[key]
           const count: Record<DashboardStatusKey, number> = {
             locationLowStock: lowStockItemCount,
-            globalLowStock: globalLowStock.length,
-            expiringSoon: expiringSoon.length,
+            globalLowStock: globalLowStockCount,
+            expiringSoon: expiringSoonCount,
             expired: expiredCount,
           }
           return (
@@ -242,9 +213,14 @@ export function Dashboard() {
                             )}
                           </td>
                           <td>
-                            <Link to={`/supply-items?locationId=${location.locationId}`} className="btn btn-sm btn-primary">
-                              <i className="bi bi-search" /> 查看物資
-                            </Link>
+                            {/* 物資清單僅總管可開；其他角色只看狀態，不顯示會被擋的按鈕。 */}
+                            {isAdmin ? (
+                              <Link to={`/supply-items?locationId=${location.locationId}`} className="btn btn-sm btn-primary">
+                                <i className="bi bi-search" /> 查看物資
+                              </Link>
+                            ) : (
+                              <span className="text-muted small">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}

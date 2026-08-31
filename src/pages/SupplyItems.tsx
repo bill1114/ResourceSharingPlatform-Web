@@ -122,11 +122,37 @@ export function SupplyItems() {
       })
       .eq('id', editItem.id)
 
-    setEditSaving(false)
     if (updErr) {
+      setEditSaving(false)
       setError(updErr.message)
       return
     }
+
+    // #4 連動：物資清單設定的安全庫存＝該「據點 × 品項」的低庫存門檻。
+    // 寫回 location_inventory_safety_stock，讓低庫存判斷、首頁、物資明細都吃到。
+    const defId = chosenVariant
+      ? chosenVariant.inventory_item_definition_id
+      : definitions.find((d) => d.category === editItem.category && d.item_name === editItem.item_name)?.id ?? null
+    if (defId != null) {
+      const { error: safetyErr } = await supabase
+        .from('location_inventory_safety_stock')
+        .upsert(
+          {
+            location_id: editItem.location_id,
+            inventory_item_definition_id: defId,
+            safety_stock: Number(editForm.safetyStock) || 0,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'location_id,inventory_item_definition_id' }
+        )
+      if (safetyErr) {
+        setEditSaving(false)
+        setError(`庫存已更新，但安全庫存門檻寫入失敗：${safetyErr.message}`)
+        return
+      }
+    }
+
+    setEditSaving(false)
     setEditItem(null)
     void load()
   }
@@ -676,7 +702,7 @@ export function SupplyItems() {
                       />
                     </div>
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">安全庫存</label>
+                      <label className="form-label">安全庫存（低庫存門檻）</label>
                       <input
                         className="form-control"
                         type="number"
@@ -684,6 +710,7 @@ export function SupplyItems() {
                         value={editForm.safetyStock}
                         onChange={(e) => setEditForm({ ...editForm, safetyStock: e.target.value })}
                       />
+                      <div className="form-text">此值同時設定該據點此品項的低庫存門檻：現有總量 ≤ 門檻（且&gt;0）即列為低庫存，會連動首頁與物資明細。</div>
                     </div>
                   </div>
                   <div className="mb-3">
