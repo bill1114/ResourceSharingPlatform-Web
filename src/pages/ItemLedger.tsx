@@ -12,6 +12,8 @@ import { exportToExcel } from '../lib/excelExport'
 import { FlashMessage } from '../components/FlashMessage'
 import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
+import { useAuth } from '../hooks/useAuth'
+import { Roles } from '../lib/enums'
 import type { SupplyLocation } from '../types/db'
 
 interface LedgerItem {
@@ -57,6 +59,11 @@ const typeBadge: Record<LedgerType, string> = {
 const AllTypes: LedgerType[] = ['入庫', '捐贈', '領用', '報廢', '轉移', '調整']
 
 export function ItemLedger() {
+  const { profile } = useAuth()
+  const isAdmin = profile?.role_name === Roles.Admin
+  const myLocId = profile?.location_id ?? null
+  // 幫主看得到全部據點的明細，但只能「調整」自己據點的批次（總管不限）。
+  const canAdjust = (locationId: number) => isAdmin || locationId === myLocId
   const [entries, setEntries] = useState<LedgerEntry[]>([])
   const [items, setItems] = useState<LedgerItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
@@ -337,13 +344,19 @@ export function ItemLedger() {
                         <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
                       </td>
                       <td className="col-min text-nowrap">
-                        <button className="btn btn-sm btn-outline-secondary me-1" title="盤點調整此批次數量" onClick={() => openAdjust(e.itemId)}>
-                          <i className="bi bi-sliders" /> 調整
-                        </button>
-                        {e.type === '調整' && e.adjustmentLogId != null && (
-                          <button className="btn btn-sm btn-outline-danger" title="刪除此調整並回算" onClick={() => void deleteAdjust(e.adjustmentLogId!)}>
-                            <i className="bi bi-trash" />
-                          </button>
+                        {canAdjust(e.locationId) ? (
+                          <>
+                            <button className="btn btn-sm btn-outline-secondary me-1" title="盤點調整此批次數量" onClick={() => openAdjust(e.itemId)}>
+                              <i className="bi bi-sliders" /> 調整
+                            </button>
+                            {e.type === '調整' && e.adjustmentLogId != null && (
+                              <button className="btn btn-sm btn-outline-danger" title="刪除此調整並回算" onClick={() => void deleteAdjust(e.adjustmentLogId!)}>
+                                <i className="bi bi-trash" />
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted small">—</span>
                         )}
                       </td>
                     </tr>
