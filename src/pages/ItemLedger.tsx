@@ -198,7 +198,7 @@ export function ItemLedger() {
       { header: '名稱', value: (e) => e.itemName },
       { header: '規格', value: (e) => e.specification ?? '' },
       { header: '類型', value: (e) => e.type },
-      { header: '增減數量', value: (e) => (e.delta == null ? '' : e.delta) },
+      { header: '增減數量', value: (e) => (e.delta == null ? '' : e.delta), total: true },
       { header: '說明', value: (e) => e.detail },
       { header: '目前數量', value: (e) => e.runningQty },
       { header: '所在據點', value: (e) => locationName(e.locationId) },

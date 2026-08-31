@@ -527,7 +527,7 @@ export function InventoryTypes() {
               </div>
               <div className="modal-body">
                 <div className="alert alert-warning small mb-3">
-                  系統會加總所有據點的同一規格庫存。<strong>募資啟動條件：當前總庫存 &lt; 門檻 − 安全庫存量</strong>。
+                  系統會加總所有據點的同一規格庫存。<strong>募資啟動條件：當前總庫存 &lt; 門檻 × 0.9</strong>。
                   門檻設為 0 表示不監控該規格。
                 </div>
                 <table className="table align-middle mb-0">
@@ -541,7 +541,8 @@ export function InventoryTypes() {
                   </thead>
                   <tbody>
                     {variants.filter((v) => v.inventory_item_definition_id === globalSafetyEditorFor.id && v.is_active).map((variant) => {
-                      const trigger = Math.max(0, (Number(globalThresholdDraft[variant.id] ?? 0) || 0) - (Number(globalSafetyDraft[variant.id] ?? 0) || 0))
+                      // 觸發點＝門檻 × 0.9（當前總庫存低於此值即啟動募資）。
+                      const trigger = Math.floor((Number(globalThresholdDraft[variant.id] ?? 0) || 0) * 0.9)
                       const monitored = (Number(globalThresholdDraft[variant.id] ?? 0) || 0) > 0
                       return (
                         <tr key={variant.id}>

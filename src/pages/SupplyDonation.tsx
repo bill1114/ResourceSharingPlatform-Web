@@ -91,7 +91,7 @@ export function SupplyDonationIndex() {
       { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
       { header: '據點', value: (l) => locationName(l.location_id) },
-      { header: '數量', value: (l) => l.stock_in_quantity },
+      { header: '數量', value: (l) => l.stock_in_quantity, total: true },
       { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
       { header: '捐贈者', value: (l) => l.donor_name ?? '' },
       { header: '聯絡電話', value: (l) => l.donor_contact ?? '' },

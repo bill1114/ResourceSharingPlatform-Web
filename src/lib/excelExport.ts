@@ -4,7 +4,12 @@
 // so SheetJS's parse-path CVEs don't apply here.
 import * as XLSX from 'xlsx'
 
-export type ExcelColumn<T> = { header: string; value: (row: T) => string | number | null | undefined }
+// total: true 的欄位會在最後加一列「總計」，把該欄的數值加總。
+export type ExcelColumn<T> = {
+  header: string
+  value: (row: T) => string | number | null | undefined
+  total?: boolean
+}
 
 function stamp(): string {
   const d = new Date()
@@ -17,6 +22,22 @@ export function exportToExcel<T>(baseName: string, sheetName: string, columns: E
     columns.map((c) => c.header),
     ...rows.map((r) => columns.map((c) => c.value(r) ?? '')),
   ]
+
+  // 若有欄位標記 total，於底部加一列「總計」，加總這些欄位的數值。
+  const hasTotal = columns.some((c) => c.total)
+  if (hasTotal && rows.length > 0) {
+    const totalRow = columns.map((c, idx) => {
+      if (c.total) {
+        return rows.reduce((sum, r) => {
+          const v = Number(c.value(r))
+          return sum + (Number.isFinite(v) ? v : 0)
+        }, 0)
+      }
+      return idx === 0 ? '總計' : ''
+    })
+    aoa.push(totalRow)
+  }
+
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!cols'] = columns.map((c) => ({ wch: Math.max(10, c.header.length * 2 + 2) }))
   const wb = XLSX.utils.book_new()

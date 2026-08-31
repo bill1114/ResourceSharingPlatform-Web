@@ -790,7 +790,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
       { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
       { header: '來源據點', value: (l) => locationName(l.location_id) },
-      { header: '領用數量', value: (l) => l.outbound_quantity },
+      { header: '領用數量', value: (l) => l.outbound_quantity, total: true },
       { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
       { header: '領用人', value: (l) => l.recipient_name },
       { header: '聯絡方式', value: (l) => l.recipient_contact ?? '' },

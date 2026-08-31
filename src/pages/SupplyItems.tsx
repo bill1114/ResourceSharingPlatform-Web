@@ -54,6 +54,9 @@ export function SupplyItems() {
   const [definitions, setDefinitions] = useState<{ id: number; category: string; item_name: string }[]>([])
   const [variants, setVariants] = useState<{ id: number; inventory_item_definition_id: number; specification: string | null; is_active: boolean }[]>([])
   const [lowStock, setLowStock] = useState<LowStockData>(emptyLowStock)
+  // 據點門檻（location_inventory_safety_stock）：物資清單「安全庫存」直接顯示此值，
+  // 與「庫存種類設定 → 據點門檻」同一來源，讀取用。
+  const [safetyStocks, setSafetyStocks] = useState<{ location_id: number; inventory_item_definition_id: number; safety_stock: number }[]>([])
   // 總量不足（全系統）判斷用：global_low_stock_view 的 種類|名稱|規格 集合。
   const [globalLowKeys, setGlobalLowKeys] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -72,6 +75,16 @@ export function SupplyItems() {
     const def = definitions.find((d) => d.category === item.category && d.item_name === item.item_name)
     if (!def) return [] as { id: number; specification: string | null }[]
     return variants.filter((v) => v.inventory_item_definition_id === def.id && v.is_active)
+  }
+
+  // 這筆物資的「安全庫存」＝該據點此品項（定義）的據點門檻（庫存種類設定所設）。
+  // 唯讀顯示，與低庫存判斷同一來源；找不到定義或未設定則為 0。
+  function thresholdFor(item: SupplyItem): number {
+    const defId =
+      lowStock.resolvedByItemId.get(item.id) ??
+      definitions.find((d) => d.category === item.category && d.item_name === item.item_name)?.id
+    if (defId == null) return 0
+    return safetyStocks.find((s) => s.location_id === item.location_id && s.inventory_item_definition_id === defId)?.safety_stock ?? 0
   }
 
   function openEdit(item: SupplyItem) {
@@ -107,12 +120,13 @@ export function SupplyItems() {
     // 規格補登：依選到的規格帶入 variant id 與規格文字（選「無」則清空）。
     const chosenVariant = editForm.variantId ? variants.find((v) => v.id === Number(editForm.variantId)) : null
 
+    // 安全庫存（低庫存門檻）不在此編輯，統一由「庫存種類設定 → 據點門檻」維護，
+    // 這裡不寫 safety_stock，避免兩處不同步。
     const { error: updErr } = await supabase
       .from('supply_item')
       .update({
         quantity: Number(editForm.quantity),
         expiration_date: editItem.stock_type === StockTypes.NoExpiry ? null : editForm.expirationDate || null,
-        safety_stock: Number(editForm.safetyStock) || 0,
         remark: editForm.remark.trim() || null,
         inventory_item_variant_id: chosenVariant ? chosenVariant.id : null,
         specification: chosenVariant ? chosenVariant.specification : null,
@@ -126,30 +140,6 @@ export function SupplyItems() {
       setEditSaving(false)
       setError(updErr.message)
       return
-    }
-
-    // #4 連動：物資清單設定的安全庫存＝該「據點 × 品項」的低庫存門檻。
-    // 寫回 location_inventory_safety_stock，讓低庫存判斷、首頁、物資明細都吃到。
-    const defId = chosenVariant
-      ? chosenVariant.inventory_item_definition_id
-      : definitions.find((d) => d.category === editItem.category && d.item_name === editItem.item_name)?.id ?? null
-    if (defId != null) {
-      const { error: safetyErr } = await supabase
-        .from('location_inventory_safety_stock')
-        .upsert(
-          {
-            location_id: editItem.location_id,
-            inventory_item_definition_id: defId,
-            safety_stock: Number(editForm.safetyStock) || 0,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'location_id,inventory_item_definition_id' }
-        )
-      if (safetyErr) {
-        setEditSaving(false)
-        setError(`庫存已更新，但安全庫存門檻寫入失敗：${safetyErr.message}`)
-        return
-      }
     }
 
     setEditSaving(false)
@@ -174,19 +164,21 @@ export function SupplyItems() {
 
   async function load() {
     setLoading(true)
-    const [itemsRes, locRes, low, globalRes, defRes, varRes] = await Promise.all([
+    const [itemsRes, locRes, low, globalRes, defRes, varRes, safetyRes] = await Promise.all([
       supabase.from('supply_item').select('*').eq('is_active', true).order('id', { ascending: false }),
       supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
       fetchLowStock(),
       supabase.from('global_low_stock_view').select('category, item_name, specification'),
       supabase.from('inventory_item_definition').select('id, category, item_name'),
       supabase.from('inventory_item_variant').select('id, inventory_item_definition_id, specification, is_active'),
+      supabase.from('location_inventory_safety_stock').select('location_id, inventory_item_definition_id, safety_stock'),
     ])
     if (itemsRes.error) setError(itemsRes.error.message)
     setItems((itemsRes.data ?? []) as SupplyItem[])
     setLocations((locRes.data ?? []) as SupplyLocation[])
     setDefinitions((defRes.data ?? []) as { id: number; category: string; item_name: string }[])
     setVariants((varRes.data ?? []) as { id: number; inventory_item_definition_id: number; specification: string | null; is_active: boolean }[])
+    setSafetyStocks((safetyRes.data ?? []) as { location_id: number; inventory_item_definition_id: number; safety_stock: number }[])
     setLowStock(low)
     setGlobalLowKeys(
       new Set(
@@ -302,12 +294,12 @@ export function SupplyItems() {
       { header: '種類', value: (i) => i.category },
       { header: '名稱', value: (i) => i.item_name },
       { header: '規格', value: (i) => i.specification ?? '' },
-      { header: '數量', value: (i) => i.quantity },
+      { header: '數量', value: (i) => i.quantity, total: true },
       { header: '單位', value: (i) => i.unit ?? '' },
       { header: '庫存分類', value: (i) => stockTypeDisplayName(i.stock_type) },
       { header: '有效期限', value: (i) => i.expiration_date ?? '' },
       { header: '據點', value: (i) => locationName(i.location_id) },
-      { header: '安全庫存', value: (i) => i.safety_stock },
+      { header: '安全庫存', value: (i) => thresholdFor(i) },
       { header: '狀態', value: (i) => itemStatus(i, lowStock).label },
       { header: '備註', value: (i) => i.remark ?? '' },
     ], filteredItems)
@@ -539,7 +531,7 @@ export function SupplyItems() {
                           </span>
                         </td>
                         <td>
-                          {item.safety_stock} {item.unit}
+                          {thresholdFor(item)} {item.unit}
                         </td>
                         <td>
                           <span className={`badge ${status.badgeClass}`}>{status.label}</span>
@@ -638,7 +630,7 @@ export function SupplyItems() {
                   <dd className="col-8">{locationName(detailsItem.location_id)}</dd>
                   <dt className="col-4">安全庫存</dt>
                   <dd className="col-8">
-                    {detailsItem.safety_stock} {detailsItem.unit}
+                    {thresholdFor(detailsItem)} {detailsItem.unit}
                   </dd>
                   <dt className="col-4">狀態</dt>
                   <dd className="col-8">
@@ -703,14 +695,8 @@ export function SupplyItems() {
                     </div>
                     <div className="col-md-6 mb-3">
                       <label className="form-label">安全庫存（低庫存門檻）</label>
-                      <input
-                        className="form-control"
-                        type="number"
-                        min={0}
-                        value={editForm.safetyStock}
-                        onChange={(e) => setEditForm({ ...editForm, safetyStock: e.target.value })}
-                      />
-                      <div className="form-text">此值同時設定該據點此品項的低庫存門檻：現有總量 ≤ 門檻（且&gt;0）即列為低庫存，會連動首頁與物資明細。</div>
+                      <input className="form-control" type="number" value={thresholdFor(editItem)} disabled readOnly />
+                      <div className="form-text">此為該據點此品項的低庫存門檻，來自「系統管理 → 庫存種類設定 → 據點門檻」，此處僅顯示、不可修改。</div>
                     </div>
                   </div>
                   <div className="mb-3">
