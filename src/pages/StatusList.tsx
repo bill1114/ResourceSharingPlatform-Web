@@ -10,6 +10,7 @@ import { statusColorMap, type DashboardStatusKey } from '../lib/statusColors'
 import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
 import { itemPhotoUrl } from '../lib/imageUpload'
 import { stockTypeDisplayName, stockTypeBadgeClass, Roles } from '../lib/enums'
+import { logActivity } from '../lib/activityLog'
 import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
@@ -201,6 +202,7 @@ export function StatusList() {
     })
     setSaving(false)
     if (insErr) return setError(insErr.message)
+    void logActivity({ action: 'request_raise', category: '申請', targetTable: 'supply_request', locationId: reqLoc, summary: `舉手缺料「${raiseRow.item_name}」${qty} ${raiseRow.unit ?? ''}`, detail: { source_location_id: srcLoc, quantity: qty } })
     setRaiseRow(null)
     navigate('/', { state: { flash: `已提出需求：${raiseRow.item_name} ${qty} ${raiseRow.unit ?? ''}` } })
   }
@@ -226,6 +228,7 @@ export function StatusList() {
       setError(insErr.message)
       return
     }
+    void logActivity({ action: 'request_disposal', category: '申請', targetTable: 'supply_request', targetId: row.id, locationId: row.locationId, summary: `申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）` })
     navigate('/', { state: { flash: `已向總管申請報廢：${row.item_name}` } })
   }
 

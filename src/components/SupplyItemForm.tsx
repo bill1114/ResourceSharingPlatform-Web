@@ -10,6 +10,7 @@ import { StockTypes, AllStockTypes, stockTypeDisplayName, Roles } from '../lib/e
 import { useAuth } from '../hooks/useAuth'
 import { ConfirmActionModal } from './ConfirmActionModal'
 import { DateSelect } from './DateSelect'
+import { logActivity } from '../lib/activityLog'
 import type {
   SupplyLocation,
   LocationInventorySafetyStock,
@@ -265,6 +266,11 @@ export function SupplyItemForm({
     setConfirmOpen(false)
     const count = prepared.length
     const asDonation = donorName.length > 0
+    void logActivity({
+      action: 'stock_in', category: '庫存異動', targetTable: 'supply_item', locationId,
+      summary: `入庫 ${count} 筆品項${asDonation ? `（捐贈人 ${donorName}）` : ''}`,
+      detail: { items: prepared.map((p) => ({ name: p.def.item_name, quantity: Number(p.item.quantity) })), donor: donorName || null },
+    })
     resetForm()
     const base = count > 1 ? `已入庫 ${count} 筆品項` : `「${prepared[0].def.item_name}」已入庫`
     onSaved?.(asDonation ? `${base}，並記錄捐贈人` : `${base}，可稍後補登捐贈人資料`)

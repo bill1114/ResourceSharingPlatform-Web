@@ -9,6 +9,7 @@ import { FlashMessage } from '../components/FlashMessage'
 import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
 import { exportToExcel } from '../lib/excelExport'
+import { logActivity } from '../lib/activityLog'
 import type { SupplyItem, SupplyLocation, SupplyStockInLog } from '../types/db'
 
 interface DonorSummaryRow {
@@ -131,6 +132,7 @@ export function SupplyDonationIndex() {
       setError(updErr.message)
       return
     }
+    void logActivity({ action: 'donation_edit', category: '資料維護', targetTable: 'supply_stock_in_log', targetId: editRow.id, locationId: editRow.location_id, summary: `補登/編輯捐贈人「${editForm.donorName.trim() || '（清空）'}」` })
     setEditRow(null)
     void load()
   }
@@ -142,6 +144,7 @@ export function SupplyDonationIndex() {
       setError(delErr.message)
       return
     }
+    void logActivity({ action: 'donation_delete', category: '資料維護', targetTable: 'supply_stock_in_log', targetId: row.id, locationId: row.location_id, summary: `刪除捐贈來源紀錄 #${row.id}（不影響庫存）` })
     void load()
   }
 

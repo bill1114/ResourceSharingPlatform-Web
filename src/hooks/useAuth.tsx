@@ -7,6 +7,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
+import { setActivityActor, clearActivityActor, logActivity } from '../lib/activityLog'
 import type { Profile } from '../types/db'
 
 const SYNTHETIC_EMAIL_SUFFIX = '@local.invalid'
@@ -33,7 +34,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null)
       return
     }
-    setProfile(data as Profile)
+    const p = data as Profile
+    setProfile(p)
+    // 稽核 Log 的 actor 快照（供 logActivity 使用）。
+    setActivityActor({ id: p.id, name: p.display_name ?? p.username ?? null, role: p.role_name })
   }
 
   useEffect(() => {
@@ -52,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadProfile(newSession.user.id)
       } else {
         setProfile(null)
+        clearActivityActor()
       }
     })
 
@@ -60,16 +65,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(username: string, password: string): Promise<{ error: string | null }> {
     const email = `${username.trim()}${SYNTHETIC_EMAIL_SUFFIX}`
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       // Generic message on purpose (mirrors AccountController's "帳號或密碼錯誤" —
       // don't reveal whether the username exists).
       return { error: '帳號或密碼錯誤' }
     }
+    // 稽核：登入（此時 profile 尚未載入，先用帳號當 actor_name）。
+    if (data.user) {
+      void logActivity({
+        action: 'login', category: '登入', summary: `帳號「${username.trim()}」登入系統`,
+        actorOverride: { id: data.user.id, name: username.trim() },
+      })
+    }
     return { error: null }
   }
 
   async function signOut() {
+    // 稽核：登出（趁 session 還在、actor 仍設定時先寫）。
+    await logActivity({ action: 'logout', category: '登入', summary: '登出系統' })
+    clearActivityActor()
     await supabase.auth.signOut()
   }
 

@@ -9,6 +9,7 @@ import { ConfirmActionModal } from '../components/ConfirmActionModal'
 import { OutboundItemPickerModal } from '../components/OutboundModals'
 import { expiryAlert } from '../lib/stockBatch'
 import { exportToExcel } from '../lib/excelExport'
+import { logActivity } from '../lib/activityLog'
 import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
 import type { SupplyItem, SupplyLocation, SupplyTransferLog, SupplyRequest } from '../types/db'
@@ -153,6 +154,8 @@ export function SupplyTransferCreate() {
       setError(data?.message ?? invokeError?.message ?? '建立轉移失敗')
       return
     }
+    const totalQty = lines.reduce((s, x) => s + x.quantity, 0)
+    void logActivity({ action: 'transfer_create', category: '庫存異動', targetTable: 'supply_transfer_log', locationId: fromLocationId ? Number(fromLocationId) : null, summary: `建立轉移（${lines.length} 項、共 ${totalQty} 件），扣來源庫存`, detail: { fromLocationId, toLocationId, lines: lines.map((x) => ({ name: x.item.item_name, quantity: x.quantity })) } })
     navigate('/transfers', { state: { flash: data.message } })
   }
 
@@ -373,7 +376,10 @@ export function SupplyTransferIndex() {
     setMessage(null)
     const { data, error } = await supabase.functions.invoke(functionName, { body: { logId } })
     if (error || !data?.success) setMessage({ type: 'danger', text: data?.message ?? error?.message ?? '操作失敗' })
-    else { setMessage({ type: 'success', text: data.message }); await load() }
+    else {
+      void logActivity({ action: functionName === 'transfer-confirm' ? 'transfer_confirm' : 'transfer_cancel', category: '庫存異動', targetTable: 'supply_transfer_log', targetId: logId, summary: functionName === 'transfer-confirm' ? `確認轉移送達 #${logId}（入庫目的據點）` : `取消轉移 #${logId}（退回來源）` })
+      setMessage({ type: 'success', text: data.message }); await load()
+    }
   }
   const locationName = (id: number) => locations.find((x) => x.id === id)?.location_name ?? `#${id}`
   const itemOf = (id: number) => items.find((x) => x.id === id)

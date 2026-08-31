@@ -5,6 +5,7 @@ import { AllStockTypes, Roles, stockTypeDisplayName } from '../lib/enums'
 import { supabase } from '../lib/supabaseClient'
 import { functionErrorMessage } from '../lib/functionError'
 import { attachSharedAiPhoto } from '../lib/imageUpload'
+import { logActivity } from '../lib/activityLog'
 import { DateSelect } from '../components/DateSelect'
 import { FlashMessage } from '../components/FlashMessage'
 import type { AIStockInLog, SupplyLocation } from '../types/db'
@@ -148,6 +149,7 @@ export function AIStockInCreate() {
     // 一張照片可能對應多筆品項：把同一張照片複製給每一筆，最後才刪除來源。
     await attachSharedAiPhoto(imagePath, confirmed)
 
+    void logActivity({ action: 'ai_stock_in', category: '庫存異動', targetTable: 'supply_item', locationId: locationId ?? null, summary: `AI 智慧入庫確認，共 ${confirmed.length} 項`, detail: { items: items.map((it) => ({ name: it.itemName, quantity: Number(it.quantity) })) } })
     setBusy(false)
     navigate('/', { state: { flash: `AI 智慧入庫完成，共 ${confirmed.length} 項` } })
   }

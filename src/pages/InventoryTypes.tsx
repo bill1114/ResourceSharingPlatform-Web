@@ -4,6 +4,7 @@
 // LocationInventorySafetyStock), not actual stock batches (that's 物資管理).
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { logActivity } from '../lib/activityLog'
 import { AllStockTypes, stockTypeDisplayName, stockTypeBadgeClass } from '../lib/enums'
 import type { InventoryItemDefinition, InventoryItemVariant, LocationInventorySafetyStock, SupplyLocation } from '../types/db'
 
@@ -213,6 +214,7 @@ export function InventoryTypes() {
       setError(failed.error.message)
       return
     }
+    void logActivity({ action: 'global_threshold_update', category: '資料維護', targetTable: 'inventory_item_variant', targetId: globalSafetyEditorFor.id, summary: `設定總量門檻：${globalSafetyEditorFor.category}｜${globalSafetyEditorFor.item_name}` })
     setGlobalSafetyEditorFor(null)
     void load()
   }
@@ -285,6 +287,7 @@ export function InventoryTypes() {
       }
     }
     setSaving(false)
+    void logActivity({ action: 'safety_threshold_update', category: '資料維護', targetTable: 'location_inventory_safety_stock', targetId: safetyEditorFor.id, summary: `設定據點門檻：${safetyEditorFor.category}｜${safetyEditorFor.item_name}` })
     setSafetyEditorFor(null)
     void load()
   }

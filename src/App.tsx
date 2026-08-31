@@ -16,6 +16,7 @@ import { SupplyTransferCreate, SupplyTransferIndex } from './pages/SupplyTransfe
 import { RecipientAnalysis } from './pages/RecipientAnalysis'
 import { DonorAnalysis } from './pages/DonorAnalysis'
 import { ItemLedger } from './pages/ItemLedger'
+import { ActivityLog } from './pages/ActivityLog'
 import { AccountManagement } from './pages/AccountManagement'
 import { LineSettings, AISettings } from './pages/AdminSettings'
 import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
@@ -147,6 +148,14 @@ function App() {
           element={
             <RoleGate roles={[Roles.Admin]}>
               <AISettings />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="/admin/activity-log"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <ActivityLog />
             </RoleGate>
           }
         />

@@ -11,6 +11,7 @@ import { FlashMessage } from '../components/FlashMessage'
 import { useAuth } from '../hooks/useAuth'
 import { Roles } from '../lib/enums'
 import { functionErrorMessage } from '../lib/functionError'
+import { logActivity } from '../lib/activityLog'
 import type { SupplyLocation, SupplyRequest } from '../types/db'
 
 // 戰情總覽全域彙總（分工單 #2/#3）：改讀 dashboard_location_status /
@@ -99,6 +100,7 @@ export function Dashboard() {
 
   async function markRequest(id: number, status: 'Fulfilled' | 'Cancelled') {
     await supabase.from('supply_request').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+    void logActivity({ action: status === 'Fulfilled' ? 'request_fulfill' : 'request_cancel', category: '申請', targetTable: 'supply_request', targetId: id, summary: `需求 #${id} 標記為${status === 'Fulfilled' ? '完成' : '取消/駁回'}` })
     void load()
   }
 
@@ -119,6 +121,7 @@ export function Dashboard() {
       alert(data?.message ?? (await functionErrorMessage(error, '報廢失敗')))
       return
     }
+    void logActivity({ action: 'request_approve_disposal', category: '庫存異動', targetTable: 'supply_item', targetId: r.supply_item_id, locationId: r.requesting_location_id, summary: `核准報廢「${r.item_name}」${r.quantity} 件（已過期）` })
     await markRequest(r.id, 'Fulfilled')
   }
 

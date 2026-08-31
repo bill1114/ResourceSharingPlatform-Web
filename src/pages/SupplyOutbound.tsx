@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
 import { functionErrorMessage } from '../lib/functionError'
+import { logActivity } from '../lib/activityLog'
 import { locationColorStyle } from '../lib/colors'
 import { Roles } from '../lib/enums'
 import {
@@ -248,6 +249,8 @@ export function SupplyOutboundCreate() {
       setError(data?.message ?? (await functionErrorMessage(invokeError, '領用失敗')))
       return
     }
+    const totalQty = recipients.reduce((s, r) => s + r.lines.reduce((t, l) => t + l.quantity, 0), 0)
+    void logActivity({ action: 'outbound', category: '庫存異動', targetTable: 'supply_outbound_log', locationId: effectiveLocationId ?? null, summary: `領用發放（${recipients.length} 位領用人、共 ${totalQty} 件）`, detail: { recipients: recipients.map((r) => ({ name: r.name.trim(), items: r.lines.map((l) => ({ name: l.item.item_name, quantity: l.quantity })) })) } })
     navigate('/outbound', { state: { flash: data.message } })
   }
 
@@ -665,6 +668,7 @@ export function SupplyOutboundIndex() {
       setMessage({ type: 'danger', text: error.message })
       return
     }
+    void logActivity({ action: 'outbound_edit', category: '庫存異動', targetTable: 'supply_outbound_log', targetId: editTarget.id, locationId: editTarget.location_id, summary: `修改領用紀錄 #${editTarget.id}（領用人 ${editForm.name.trim()}、數量 ${qty}）` })
     setEditTarget(null)
     setMessage({ type: 'success', text: '領用紀錄已更新，庫存已回算' })
     await load()
@@ -734,9 +738,10 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
 
   async function confirmCancel(reason: string) {
     if (!cancelTarget) return
+    const target = cancelTarget
     setCancelling(true)
     const { data, error } = await supabase.functions.invoke('outbound-cancel', {
-      body: { logId: cancelTarget.id, reason },
+      body: { logId: target.id, reason },
     })
     setCancelling(false)
     setCancelTarget(null)
@@ -744,6 +749,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
       setMessage({ type: 'danger', text: data?.message ?? (await functionErrorMessage(error, '取消失敗')) })
       return
     }
+    void logActivity({ action: 'outbound_cancel', category: '庫存異動', targetTable: 'supply_outbound_log', targetId: target.id, locationId: target.location_id, summary: `取消領用紀錄 #${target.id}（回庫）`, detail: { reason } })
     setMessage({ type: 'success', text: data.message })
     await load()
   }

@@ -13,6 +13,7 @@ import { FlashMessage } from '../components/FlashMessage'
 import { exportToExcel } from '../lib/excelExport'
 import { DateSelect } from '../components/DateSelect'
 import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
+import { logActivity } from '../lib/activityLog'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
 interface ItemSummaryRow {
@@ -142,6 +143,7 @@ export function SupplyItems() {
       return
     }
 
+    void logActivity({ action: 'item_edit', category: '資料維護', targetTable: 'supply_item', targetId: editItem.id, locationId: editItem.location_id, summary: `編輯物資「${editItem.item_name}」`, detail: { quantity: Number(editForm.quantity), specification: chosenVariant?.specification ?? null } })
     setEditSaving(false)
     setEditItem(null)
     void load()
@@ -313,6 +315,7 @@ export function SupplyItems() {
       return
     }
     if (item.image_path) await deleteItemPhoto(item.image_path)
+    void logActivity({ action: 'item_delete', category: '資料維護', targetTable: 'supply_item', targetId: item.id, locationId: item.location_id, summary: `刪除物資「${item.item_name}」` })
     void load()
   }
 

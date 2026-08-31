@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { AllRoles, roleDisplayName, Roles, type Role } from '../lib/enums'
 import { supabase } from '../lib/supabaseClient'
+import { logActivity } from '../lib/activityLog'
 import type { Profile, SupplyLocation } from '../types/db'
 
 type Form = { id?: string; username: string; displayName: string; password: string; roleName: Role; locationId: number | null; isActive: boolean }
@@ -29,10 +30,10 @@ export function AccountManagement() {
     `${x.username} ${x.display_name ?? ''}`.toLowerCase().includes(keyword.toLowerCase())
   ), [profiles, keyword, roleFilter, locationFilter, statusFilter])
   function resetFilters(){setKeyword('');setRoleFilter('');setLocationFilter('');setStatusFilter('')}
-  async function submit(e: FormEvent) { e.preventDefault(); setSaving(true); setMessage(null); const { data, error } = await supabase.functions.invoke('account-admin', { body: { action: form.id ? 'update' : 'create', ...form } }); setSaving(false); if (error || !data?.success) setMessage({ok:false,text:data?.message ?? error?.message ?? '儲存失敗'}); else { setMessage({ok:true,text:data.message}); setForm(emptyForm); setShowForm(false); await load() } }
+  async function submit(e: FormEvent) { e.preventDefault(); setSaving(true); setMessage(null); const isUpdate = !!form.id; const { data, error } = await supabase.functions.invoke('account-admin', { body: { action: form.id ? 'update' : 'create', ...form } }); setSaving(false); if (error || !data?.success) setMessage({ok:false,text:data?.message ?? error?.message ?? '儲存失敗'}); else { void logActivity({ action: isUpdate ? 'account_update' : 'account_create', category: '資料維護', targetTable: 'profiles', targetId: form.id || null, summary: `${isUpdate ? '修改' : '新增'}帳號「${form.username}」（${roleDisplayName(form.roleName)}）` }); setMessage({ok:true,text:data.message}); setForm(emptyForm); setShowForm(false); await load() } }
   function openCreate() { setForm(emptyForm); setShowForm(true) }
   function edit(x: Profile) { setForm({ id:x.id, username:x.username, displayName:x.display_name ?? '', password:'', roleName:x.role_name, locationId:x.location_id, isActive:x.is_active }); setShowForm(true) }
-  async function deactivate(x: Profile) { if(!confirm(`確定停用帳號「${x.username}」嗎？停用後該帳號將無法登入。`))return; setSaving(true); setMessage(null); const{data,error}=await supabase.functions.invoke('account-admin',{body:{action:'update',id:x.id,username:x.username,displayName:x.display_name??'',password:'',roleName:x.role_name,locationId:x.location_id,isActive:false}}); setSaving(false); setMessage({ok:!!data?.success,text:data?.message??error?.message??'停用失敗'}); if(data?.success)await load() }
+  async function deactivate(x: Profile) { if(!confirm(`確定停用帳號「${x.username}」嗎？停用後該帳號將無法登入。`))return; setSaving(true); setMessage(null); const{data,error}=await supabase.functions.invoke('account-admin',{body:{action:'update',id:x.id,username:x.username,displayName:x.display_name??'',password:'',roleName:x.role_name,locationId:x.location_id,isActive:false}}); setSaving(false); setMessage({ok:!!data?.success,text:data?.message??error?.message??'停用失敗'}); if(data?.success){void logActivity({action:'account_deactivate',category:'資料維護',targetTable:'profiles',targetId:x.id,summary:`停用帳號「${x.username}」`});await load()} }
   async function lineAction(action:'createBindCode'|'unbind',id:string){setSaving(true);const{data,error}=await supabase.functions.invoke('account-admin',{body:{action,id}});setSaving(false)
     // 產生綁定碼成功時不重複顯示一般訊息 —— 底下有專屬的倒數卡片，訊息會變成兩份。
     if(action==='createBindCode'&&data?.success&&data.code){setMessage(null);setBindCode({code:data.code,expiresAt:data.expiresAt,issuedAt:Date.now(),username:profiles.find(p=>p.id===id)?.username??''});setNowMs(Date.now());return}

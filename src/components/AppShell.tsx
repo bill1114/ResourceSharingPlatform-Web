@@ -189,6 +189,12 @@ export function AppShell() {
                         <NavLink className="dropdown-item" to="/admin/ai-settings">
                           <i className="bi bi-stars" /> AI 智慧入庫設定
                         </NavLink>
+                      </li>
+                      <li><hr className="dropdown-divider" /></li>
+                      <li>
+                        <NavLink className="dropdown-item" to="/admin/activity-log">
+                          <i className="bi bi-clipboard-data" /> 操作紀錄
+                        </NavLink>
                       </li></>
                       )}
                     </ul>

@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useItemPicker } from '../hooks/useItemPicker'
 import { functionErrorMessage } from '../lib/functionError'
+import { logActivity } from '../lib/activityLog'
 import { locationColorStyle } from '../lib/colors'
 import { Roles, AllDisposalReasons, disposalReasonDisplayName, disposalReasonBadgeClass, DisposalReasons } from '../lib/enums'
 import { ExpiringItemsPanel, StockBatchPicker } from '../components/StockBatchPicker'
@@ -155,6 +156,7 @@ export function SupplyDisposalCreate() {
       setError(data?.message ?? (await functionErrorMessage(invokeError, '報廢失敗')))
       return
     }
+    void logActivity({ action: 'disposal', category: '庫存異動', targetTable: 'supply_disposal_log', targetId: selected.id, locationId: Number(locationId), summary: `報廢「${selected.item_name}」${qty} ${selected.unit ?? ''}（${disposalReasonDisplayName(reason)}）`, detail: { reason, remark: remark || null } })
     navigate('/disposals', { state: { flash: data.message } })
   }
 

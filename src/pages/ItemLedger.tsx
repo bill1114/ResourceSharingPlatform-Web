@@ -14,6 +14,7 @@ import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
 import { useAuth } from '../hooks/useAuth'
 import { Roles } from '../lib/enums'
+import { logActivity } from '../lib/activityLog'
 import type { SupplyLocation } from '../types/db'
 
 interface LedgerItem {
@@ -235,6 +236,7 @@ export function ItemLedger() {
       setError(rpcErr.message)
       return
     }
+    void logActivity({ action: 'adjust', category: '庫存異動', targetTable: 'supply_item', targetId: adjustItem.id, locationId: adjustItem.location_id, summary: `盤點調整「${adjustItem.item_name}」為 ${n} ${adjustItem.unit ?? ''}`, detail: { before: adjustItem.quantity, after: n, reason: adjustReason.trim() || null } })
     setAdjustItem(null)
     void load()
   }
@@ -246,6 +248,7 @@ export function ItemLedger() {
       setError(rpcErr.message)
       return
     }
+    void logActivity({ action: 'adjust_delete', category: '庫存異動', targetTable: 'supply_adjustment_log', targetId: logId, summary: `刪除盤點調整紀錄 #${logId}（回算庫存）` })
     void load()
   }
 
