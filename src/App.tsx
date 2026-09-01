@@ -68,7 +68,8 @@ function App() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/status/:status" element={<StatusList />} />
-        <Route path="/supply-items" element={<RoleGate roles={[Roles.Admin]}><SupplyItems /></RoleGate>} />
+        {/* 物資清單：全角色可開（戰情總覽「查看物資」用），非總管為唯讀檢視；操作按鈕在頁內鎖總管。 */}
+        <Route path="/supply-items" element={<SupplyItems />} />
         <Route path="/stock-in" element={<RoleGate roles={[Roles.Admin, Roles.Cadre]}><StockIn /></RoleGate>} />
         <Route path="/supply-locations" element={<RoleGate roles={[Roles.Admin]}><SupplyLocations /></RoleGate>} />
         <Route

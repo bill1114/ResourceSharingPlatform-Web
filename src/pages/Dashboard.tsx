@@ -216,14 +216,10 @@ export function Dashboard() {
                             )}
                           </td>
                           <td>
-                            {/* 物資清單僅總管可開；其他角色只看狀態，不顯示會被擋的按鈕。 */}
-                            {isAdmin ? (
-                              <Link to={`/supply-items?locationId=${location.locationId}`} className="btn btn-sm btn-primary">
-                                <i className="bi bi-search" /> 查看物資
-                              </Link>
-                            ) : (
-                              <span className="text-muted small">—</span>
-                            )}
+                            {/* 查看物資：全角色可用；非總管開啟的是唯讀檢視。 */}
+                            <Link to={`/supply-items?locationId=${location.locationId}`} className="btn btn-sm btn-primary">
+                              <i className="bi bi-search" /> 查看物資
+                            </Link>
                           </td>
                         </tr>
                       ))}

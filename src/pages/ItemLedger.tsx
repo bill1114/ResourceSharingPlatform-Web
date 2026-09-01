@@ -1,4 +1,5 @@
-// 物資明細（總管專用）—「一列一筆異動」的完整明細表。
+// 物資明細 —「一列一筆異動」的完整明細表。總管看全部據點並可調整；
+// 幫主只看自己據點的明細並可調整（不顯示別據點）。
 // 每筆物資從入庫開始，後續的 捐贈／領用／報廢／轉移／調整 都各自攤成一列，
 // 顯示 類型／增減數量／說明。可用 關鍵字、據點、類型 篩選；匯出全部（右上角）。
 // 操作：
@@ -63,7 +64,7 @@ export function ItemLedger() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
   const myLocId = profile?.location_id ?? null
-  // 幫主看得到全部據點的明細，但只能「調整」自己據點的批次（總管不限）。
+  // 幫主只看自己據點的明細並可「調整」；總管不限據點。
   const canAdjust = (locationId: number) => isAdmin || locationId === myLocId
   const [entries, setEntries] = useState<LedgerEntry[]>([])
   const [items, setItems] = useState<LedgerItem[]>([])
@@ -184,13 +185,15 @@ export function ItemLedger() {
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase()
     return entries.filter((e) => {
+      // 幫主只看自己據點的明細（總管不限）。
+      if (!isAdmin && myLocId != null && e.locationId !== myLocId) return false
       if (locationFilter && e.locationId !== Number(locationFilter)) return false
       if (typeFilter && e.type !== typeFilter) return false
       if (!withinRange(e.time, fromDate, toDate)) return false
       if (k && !`${e.category} ${e.itemName} ${e.specification ?? ''}`.toLowerCase().includes(k)) return false
       return true
     })
-  }, [entries, keyword, locationFilter, typeFilter, fromDate, toDate])
+  }, [entries, keyword, locationFilter, typeFilter, fromDate, toDate, isAdmin, myLocId])
 
   function handleExport() {
     exportToExcel<LedgerEntry>('物資明細', '物資明細', [
@@ -287,12 +290,16 @@ export function ItemLedger() {
             </div>
             <div className="col-md-3">
               <label className="form-label">據點</label>
-              <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
-                <option value="">全部據點</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>{l.location_name}</option>
-                ))}
-              </select>
+              {isAdmin ? (
+                <select className="form-select" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                  <option value="">全部據點</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>{l.location_name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input className="form-control" disabled value={locationName(myLocId ?? -1)} />
+              )}
             </div>
             <div className="col-md-4">
               <label className="form-label">異動日期區間</label>

@@ -47,7 +47,6 @@ function itemStatus(item: SupplyItem, low: LowStockData): { label: string; badge
 export function SupplyItems() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
-  const isAdminOrCadre = isAdmin || profile?.role_name === Roles.Cadre
   const [searchParams] = useSearchParams()
   const [items, setItems] = useState<SupplyItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
@@ -324,14 +323,17 @@ export function SupplyItems() {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>
           <i className="bi bi-box" /> 物資管理
+          {!isAdmin && <span className="badge bg-secondary ms-2 align-middle fs-6">唯讀檢視</span>}
         </h2>
         <div className="d-flex gap-2">
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filteredItems.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
           </button>
-          <Link className="btn btn-primary" to="/stock-in">
-            <i className="bi bi-box-arrow-in-down" /> 物資入庫
-          </Link>
+          {isAdmin && (
+            <Link className="btn btn-primary" to="/stock-in">
+              <i className="bi bi-box-arrow-in-down" /> 物資入庫
+            </Link>
+          )}
         </div>
       </div>
 
@@ -544,12 +546,13 @@ export function SupplyItems() {
                             <button className="btn btn-info" title="詳細資料" onClick={() => setDetailsItem(item)}>
                               <i className="bi bi-eye" />
                             </button>
-                            {isAdminOrCadre && (
+                            {/* 物資清單的操作（編輯/轉移/刪除）僅總管；幫主/小幫手為唯讀檢視。 */}
+                            {isAdmin && (
                               <button className="btn btn-warning" title="編輯" onClick={() => openEdit(item)}>
                                 <i className="bi bi-pencil" />
                               </button>
                             )}
-                            {isAdminOrCadre && (
+                            {isAdmin && (
                               <Link className="btn btn-primary" title="物資轉移" to={`/transfers/create?supplyItemId=${item.id}`}>
                                 <i className="bi bi-arrow-left-right" />
                               </Link>
