@@ -47,6 +47,10 @@ function itemStatus(item: SupplyItem, low: LowStockData): { label: string; badge
 export function SupplyItems() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
+  const isCadre = profile?.role_name === Roles.Cadre
+  const myLocId = profile?.location_id ?? null
+  // 物資清單操作權限：總管不限；幫主只能操作自己據點的物資；小幫手唯讀。
+  const canOperate = (item: SupplyItem) => isAdmin || (isCadre && item.location_id === myLocId)
   const [searchParams] = useSearchParams()
   const [items, setItems] = useState<SupplyItem[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
@@ -323,13 +327,14 @@ export function SupplyItems() {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>
           <i className="bi bi-box" /> 物資管理
-          {!isAdmin && <span className="badge bg-secondary ms-2 align-middle fs-6">唯讀檢視</span>}
+          {!isAdmin && !isCadre && <span className="badge bg-secondary ms-2 align-middle fs-6">唯讀檢視</span>}
+          {isCadre && <span className="badge bg-info text-dark ms-2 align-middle fs-6">僅可操作自己據點</span>}
         </h2>
         <div className="d-flex gap-2">
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filteredItems.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
           </button>
-          {isAdmin && (
+          {(isAdmin || isCadre) && (
             <Link className="btn btn-primary" to="/stock-in">
               <i className="bi bi-box-arrow-in-down" /> 物資入庫
             </Link>
@@ -546,18 +551,18 @@ export function SupplyItems() {
                             <button className="btn btn-info" title="詳細資料" onClick={() => setDetailsItem(item)}>
                               <i className="bi bi-eye" />
                             </button>
-                            {/* 物資清單的操作（編輯/轉移/刪除）僅總管；幫主/小幫手為唯讀檢視。 */}
-                            {isAdmin && (
+                            {/* 編輯/轉移/刪除：總管不限；幫主限自己據點；小幫手唯讀。 */}
+                            {canOperate(item) && (
                               <button className="btn btn-warning" title="編輯" onClick={() => openEdit(item)}>
                                 <i className="bi bi-pencil" />
                               </button>
                             )}
-                            {isAdmin && (
+                            {canOperate(item) && (
                               <Link className="btn btn-primary" title="物資轉移" to={`/transfers/create?supplyItemId=${item.id}`}>
                                 <i className="bi bi-arrow-left-right" />
                               </Link>
                             )}
-                            {isAdmin && (
+                            {canOperate(item) && (
                               <button className="btn btn-danger" title="刪除" onClick={() => void handleDelete(item)}>
                                 <i className="bi bi-trash" />
                               </button>
