@@ -140,7 +140,7 @@ export function Dashboard() {
   return (
     <div className="container-fluid mt-4">
       <h2 className="mb-4">
-        <i className="bi bi-speedometer2" /> 地方物資戰情總覽
+        <i className="bi bi-speedometer2" /> 物資總攬
       </h2>
       <FlashMessage />
 
@@ -232,7 +232,8 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* p.5/6/7：待處理缺料需求（全體可見）；來源據點可一鍵「轉移補貨」 */}
+      {/* 待處理缺料需求；小幫手不需看到（僅總管/幫主） */}
+      {isAdminOrCadre && (
       <div className="row">
         <div className="col-12 mb-4">
           <div className="card shadow-sm">
@@ -325,6 +326,7 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      )}
 
     </div>
   )

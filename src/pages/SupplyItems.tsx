@@ -13,6 +13,7 @@ import { FlashMessage } from '../components/FlashMessage'
 import { exportToExcel } from '../lib/excelExport'
 import { DateSelect } from '../components/DateSelect'
 import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
+import { EXPIRY_WARNING_DAYS } from '../lib/stockBatch'
 import { logActivity } from '../lib/activityLog'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
@@ -38,7 +39,7 @@ function itemStatus(item: SupplyItem, low: LowStockData): { label: string; badge
     const exp = new Date(item.expiration_date)
     if (exp < today()) return { label: '已過期', badgeClass: 'bg-dark' }
     const in30 = new Date(today())
-    in30.setDate(in30.getDate() + 30)
+    in30.setDate(in30.getDate() + EXPIRY_WARNING_DAYS)
     if (exp <= in30) return { label: '即將過期', badgeClass: 'bg-warning text-dark' }
   }
   return { label: '正常', badgeClass: 'bg-success' }
@@ -208,7 +209,7 @@ export function SupplyItems() {
   function matchesStatus(i: SupplyItem): boolean {
     if (!statusFilter) return true
     const todayStr = new Date().toISOString().slice(0, 10)
-    const in30Str = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+    const in30Str = new Date(Date.now() + EXPIRY_WARNING_DAYS * 86400000).toISOString().slice(0, 10)
     switch (statusFilter) {
       case 'lowStock':
         return isItemLowStock(i, lowStock)
@@ -326,7 +327,7 @@ export function SupplyItems() {
     <div className="container-fluid mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>
-          <i className="bi bi-box" /> 物資管理
+          <i className="bi bi-box" /> 物資清單
           {!isAdmin && !isCadre && <span className="badge bg-secondary ms-2 align-middle fs-6">唯讀檢視</span>}
           {isCadre && <span className="badge bg-info text-dark ms-2 align-middle fs-6">僅可操作自己據點</span>}
         </h2>

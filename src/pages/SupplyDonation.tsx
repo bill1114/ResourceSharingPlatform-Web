@@ -10,22 +10,13 @@ import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
 import { exportToExcel } from '../lib/excelExport'
 import { logActivity } from '../lib/activityLog'
+import { statusCardStyle, statusColorMap } from '../lib/statusColors'
 import type { SupplyItem, SupplyLocation, SupplyStockInLog } from '../types/db'
-
-interface DonorSummaryRow {
-  donor_name: string
-  donor_contact: string
-  pickup_count: number
-  distinct_item_count: number
-  first_donation_date: string
-  last_donation_date: string
-}
 
 export function SupplyDonationIndex() {
   const [logs, setLogs] = useState<SupplyStockInLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
-  const [donorSummary, setDonorSummary] = useState<DonorSummaryRow[]>([])
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [filledFilter, setFilledFilter] = useState('') // '' 全部 / filled 已填捐贈人 / empty 待補登
@@ -41,17 +32,15 @@ export function SupplyDonationIndex() {
 
   async function load() {
     setLoading(true)
-    const [logRes, locRes, itemRes, summaryRes] = await Promise.all([
+    const [logRes, locRes, itemRes] = await Promise.all([
       supabase.from('supply_stock_in_log').select('*').order('stock_in_time', { ascending: false }).limit(300),
       supabase.from('supply_location').select('*'),
       supabase.from('supply_item').select('id, item_name, specification, unit'),
-      supabase.from('donor_leaderboard_view').select('*').order('pickup_count', { ascending: false }),
     ])
     if (logRes.error) setError(logRes.error.message)
     setLogs((logRes.data ?? []) as SupplyStockInLog[])
     setLocations((locRes.data ?? []) as SupplyLocation[])
     setItems((itemRes.data ?? []) as SupplyItem[])
-    setDonorSummary((summaryRes.data ?? []) as DonorSummaryRow[])
     setLoading(false)
   }
   useEffect(() => {
@@ -271,25 +260,15 @@ export function SupplyDonationIndex() {
           </div>
         </div>
         <div className="col-md-4">
-          <div className="card shadow-sm">
-            <div className="card-header bg-light">
-              <i className="bi bi-trophy" /> 捐贈者排行
-            </div>
+          {/* 快速查看：總量不足／啟動募資（與戰情總覽紅色卡片相同，導向同一清單頁） */}
+          <Link to="/status/globalLowStock" className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle('globalLowStock')}>
             <div className="card-body">
-              {donorSummary.length === 0 ? (
-                <p className="text-muted mb-0">尚無資料</p>
-              ) : (
-                <ul className="list-group list-group-flush">
-                  {donorSummary.map((d, i) => (
-                    <li key={i} className="list-group-item d-flex justify-content-between align-items-center px-0">
-                      <span>{d.donor_name}</span>
-                      <span className="badge bg-primary rounded-pill">{d.pickup_count} 次</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <h6>
+                <i className={`bi ${statusColorMap.globalLowStock.icon}`} /> {statusColorMap.globalLowStock.label}
+              </h6>
+              <small style={{ opacity: 0.85 }}>點擊查看清單 →</small>
             </div>
-          </div>
+          </Link>
         </div>
       </div>
 

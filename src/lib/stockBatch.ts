@@ -5,7 +5,7 @@ import { supabase } from './supabaseClient'
 import type { SupplyItem } from '../types/db'
 
 // 與戰情總覽、物資清單的「即將過期」門檻一致。
-export const EXPIRY_WARNING_DAYS = 30
+export const EXPIRY_WARNING_DAYS = 10
 
 function startOfToday(): number {
   const d = new Date()

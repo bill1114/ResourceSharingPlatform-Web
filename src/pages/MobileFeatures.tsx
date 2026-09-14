@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabaseClient'
 import { functionErrorMessage } from '../lib/functionError'
 import { attachSharedAiPhoto } from '../lib/imageUpload'
 import { logActivity } from '../lib/activityLog'
+import { EXPIRY_WARNING_DAYS } from '../lib/stockBatch'
 import type { AIStockInLog, SupplyItem, SupplyLocation, SupplyTransferLog } from '../types/db'
 import './mobile-original.css'
 
@@ -40,7 +41,7 @@ function useMobileData() {
 function MobileTop({ eyebrow, title, meta, refresh }: { eyebrow?: string; title: string; meta: string; refresh?: () => void }) {
   return <header className="m-hero"><div>{eyebrow && <div className="m-eyebrow">{eyebrow}</div>}<h1>{title}</h1><p>{meta}</p></div>{refresh && <button className="m-refresh" onClick={refresh} aria-label="重新整理">↻</button>}</header>
 }
-function expiryState(x: SupplyItem) { if (!x.expiration_date) return 'normal'; const days = Math.ceil((new Date(x.expiration_date).getTime() - Date.now()) / 86400000); return days < 0 ? 'expired' : days <= 30 ? 'expiring' : 'normal' }
+function expiryState(x: SupplyItem) { if (!x.expiration_date) return 'normal'; const days = Math.ceil((new Date(x.expiration_date).getTime() - Date.now()) / 86400000); return days < 0 ? 'expired' : days <= EXPIRY_WARNING_DAYS ? 'expiring' : 'normal' }
 function expiryText(x: SupplyItem) { const s = expiryState(x); return !x.expiration_date ? '無效期' : s === 'expired' ? `已過期 ${x.expiration_date}` : s === 'expiring' ? `快過期 ${x.expiration_date}` : `效期 ${x.expiration_date}` }
 function ItemCard({ item, selected, onClick }: { item: SupplyItem; selected?: boolean; onClick?: () => void }) {
   const Tag = onClick ? 'button' : 'div'; const state = expiryState(item)

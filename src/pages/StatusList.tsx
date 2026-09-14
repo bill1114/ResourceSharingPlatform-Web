@@ -11,6 +11,7 @@ import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from 
 import { itemPhotoUrl } from '../lib/imageUpload'
 import { stockTypeDisplayName, stockTypeBadgeClass, Roles } from '../lib/enums'
 import { logActivity } from '../lib/activityLog'
+import { EXPIRY_WARNING_DAYS } from '../lib/stockBatch'
 import { FlashMessage } from '../components/FlashMessage'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
@@ -88,7 +89,7 @@ export function StatusList() {
   }
 
   const today = new Date().toISOString().slice(0, 10)
-  const in30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+  const in30 = new Date(Date.now() + EXPIRY_WARNING_DAYS * 86400000).toISOString().slice(0, 10)
 
   const rows = useMemo<Row[]>(() => {
     if (!isValidStatus(status)) return []

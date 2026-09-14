@@ -10,16 +10,13 @@ export function Login() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Where to go once authenticated: the page the user originally requested
-  // (set by ProtectedRoute when it bounced them here), else the dashboard.
-  // This must drive the "already logged in" redirect too — otherwise a LINE
-  // user opening a /mobile/* link would land on the dashboard instead of the
-  // feature they tapped, because signing in flips `session` true and this
-  // guard re-renders before anything else can navigate.
-  const from = (location.state as { from?: string })?.from ?? '/'
+  // 登入後一律導向戰情總覽（/）；唯一例外是 LINE 圖文選單的 /mobile/* 深連結，
+  // 保留使用者原本點的手機功能頁，其餘全部統一回戰情總覽。
+  const requested = (location.state as { from?: string })?.from
+  const target = requested && requested.startsWith('/mobile/') ? requested : '/'
 
   if (session) {
-    return <Navigate to={from} replace />
+    return <Navigate to={target} replace />
   }
 
   async function handleSubmit(e: FormEvent) {
