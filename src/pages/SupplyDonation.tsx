@@ -269,21 +269,32 @@ export function SupplyDonationIndex() {
             <div className="card-header" style={{ backgroundColor: statusColorMap.globalLowStock.bg, color: statusColorMap.globalLowStock.text }}>
               <i className={`bi ${statusColorMap.globalLowStock.icon}`} /> {statusColorMap.globalLowStock.label}（{globalLow.length}）
             </div>
-            <div className="card-body" style={{ maxHeight: 360, overflowY: 'auto' }}>
+            <div className="card-body p-0" style={{ maxHeight: 420, overflowY: 'auto' }}>
               {globalLow.length === 0 ? (
-                <p className="text-muted mb-0">目前沒有總量不足的品項</p>
+                <p className="text-muted mb-0 p-3">目前沒有總量不足的品項</p>
               ) : (
-                <ul className="list-group list-group-flush">
-                  {globalLow.map((g, i) => (
-                    <li key={i} className="list-group-item px-0 py-2">
-                      <div className="fw-semibold">{g.item_name}{g.specification ? `／${g.specification}` : ''}</div>
-                      <div className="small text-muted">
-                        現有 <span className="text-danger fw-semibold">{g.total_quantity}</span> {g.unit}
-                        ｜門檻 {g.global_threshold}（觸發點 {Math.floor(g.global_threshold * 0.9)}）
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="table-responsive">
+                  <table className="table table-sm table-hover align-middle mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th>品項</th>
+                        <th className="text-end">現有</th>
+                        <th className="text-end">門檻</th>
+                        <th className="text-end">觸發點</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {globalLow.map((g, i) => (
+                        <tr key={i}>
+                          <td>{g.item_name}{g.specification ? `／${g.specification}` : ''}</td>
+                          <td className="text-end text-danger fw-semibold">{g.total_quantity}</td>
+                          <td className="text-end">{g.global_threshold}</td>
+                          <td className="text-end">{Math.floor(g.global_threshold * 0.9)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
