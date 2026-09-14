@@ -10,13 +10,15 @@ import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
 import { exportToExcel } from '../lib/excelExport'
 import { logActivity } from '../lib/activityLog'
-import { statusCardStyle, statusColorMap } from '../lib/statusColors'
+import { statusColorMap } from '../lib/statusColors'
 import type { SupplyItem, SupplyLocation, SupplyStockInLog } from '../types/db'
 
 export function SupplyDonationIndex() {
   const [logs, setLogs] = useState<SupplyStockInLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
+  // 總量不足／啟動募資：直接內嵌顯示（與戰情總覽同一來源 global_low_stock_view）
+  const [globalLow, setGlobalLow] = useState<{ category: string; item_name: string; specification: string | null; unit: string; total_quantity: number; global_threshold: number }[]>([])
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [filledFilter, setFilledFilter] = useState('') // '' 全部 / filled 已填捐贈人 / empty 待補登
@@ -32,15 +34,17 @@ export function SupplyDonationIndex() {
 
   async function load() {
     setLoading(true)
-    const [logRes, locRes, itemRes] = await Promise.all([
+    const [logRes, locRes, itemRes, glowRes] = await Promise.all([
       supabase.from('supply_stock_in_log').select('*').order('stock_in_time', { ascending: false }).limit(300),
       supabase.from('supply_location').select('*'),
       supabase.from('supply_item').select('id, item_name, specification, unit'),
+      supabase.from('global_low_stock_view').select('category, item_name, specification, unit, total_quantity, global_threshold'),
     ])
     if (logRes.error) setError(logRes.error.message)
     setLogs((logRes.data ?? []) as SupplyStockInLog[])
     setLocations((locRes.data ?? []) as SupplyLocation[])
     setItems((itemRes.data ?? []) as SupplyItem[])
+    setGlobalLow((glowRes.data ?? []) as typeof globalLow)
     setLoading(false)
   }
   useEffect(() => {
@@ -260,15 +264,29 @@ export function SupplyDonationIndex() {
           </div>
         </div>
         <div className="col-md-4">
-          {/* 快速查看：總量不足／啟動募資（與戰情總覽紅色卡片相同，導向同一清單頁） */}
-          <Link to="/status/globalLowStock" className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle('globalLowStock')}>
-            <div className="card-body">
-              <h6>
-                <i className={`bi ${statusColorMap.globalLowStock.icon}`} /> {statusColorMap.globalLowStock.label}
-              </h6>
-              <small style={{ opacity: 0.85 }}>點擊查看清單 →</small>
+          {/* 總量不足／啟動募資：直接內嵌清單（與戰情總覽同一來源） */}
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-header" style={{ backgroundColor: statusColorMap.globalLowStock.bg, color: statusColorMap.globalLowStock.text }}>
+              <i className={`bi ${statusColorMap.globalLowStock.icon}`} /> {statusColorMap.globalLowStock.label}（{globalLow.length}）
             </div>
-          </Link>
+            <div className="card-body" style={{ maxHeight: 360, overflowY: 'auto' }}>
+              {globalLow.length === 0 ? (
+                <p className="text-muted mb-0">目前沒有總量不足的品項</p>
+              ) : (
+                <ul className="list-group list-group-flush">
+                  {globalLow.map((g, i) => (
+                    <li key={i} className="list-group-item px-0 py-2">
+                      <div className="fw-semibold">{g.item_name}{g.specification ? `／${g.specification}` : ''}</div>
+                      <div className="small text-muted">
+                        現有 <span className="text-danger fw-semibold">{g.total_quantity}</span> {g.unit}
+                        ｜門檻 {g.global_threshold}（觸發點 {Math.floor(g.global_threshold * 0.9)}）
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
