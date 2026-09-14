@@ -347,8 +347,11 @@ export function SupplyDisposalIndex() {
     return items.find((i) => i.id === id)
   }
 
+  const myLoc = profile?.location_id ?? null
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
+      // 幫主只看自己據點的報廢紀錄（看不到別據點）；總管不限。
+      if (!isAdmin && myLoc != null && log.location_id !== myLoc) return false
       if (locationFilter && log.location_id !== Number(locationFilter)) return false
       if (reasonFilter && log.reason !== reasonFilter) return false
       if (!withinRange(log.disposal_time, fromDate, toDate)) return false

@@ -41,6 +41,13 @@ function toItem(x: AIStockInLog): AiItem {
   }
 }
 
+// 手動新增品項（AI 辨識失敗/漏判時人工輸入）；logId 給唯一負數當標記，
+// confirmAll 時 logId<=0 走「直接寫入庫存」而非 ai-stockin-confirm。
+let manualSeq = -1
+function blankManualItem(): AiItem {
+  return { logId: manualSeq--, category: '', itemName: '', specification: '', quantity: 1, unit: '個', stockType: 'HasExpiry', expirationDate: '', safetyStock: 0, remark: '', confidence: null }
+}
+
 export function AIStockInCreate() {
   const { profile } = useAuth()
   const [params] = useSearchParams()
@@ -82,6 +89,10 @@ export function AIStockInCreate() {
   function removeItem(logId: number) {
     setItems((prev) => (prev && prev.length > 1 ? prev.filter((it) => it.logId !== logId) : prev))
   }
+  function addManualItem() {
+    setItems((prev) => [...(prev ?? []), blankManualItem()])
+    setMessage(null)
+  }
 
   async function recognize(e: FormEvent) {
     e.preventDefault()
@@ -115,33 +126,63 @@ export function AIStockInCreate() {
   async function confirmAll(e: FormEvent) {
     e.preventDefault()
     if (!items || !items.length) return
+    if (!locationId) { setMessage({ ok: false, text: '請選擇據點' }); return }
+    // 送出前基本驗證（含手動品項）。
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]
+      if (!it.category.trim() || !it.itemName.trim()) { setMessage({ ok: false, text: `品項 ${i + 1}：請填物資種類與名稱` }); return }
+      if (!it.quantity || Number(it.quantity) <= 0) { setMessage({ ok: false, text: `品項 ${i + 1}：數量需大於 0` }); return }
+      if (it.stockType !== 'NoExpiry' && !it.expirationDate) { setMessage({ ok: false, text: `品項 ${i + 1}：有效期物資／冷凍食品需填有效期限` }); return }
+    }
     setBusy(true)
     setMessage(null)
+    const operator = profile?.display_name ?? profile?.username ?? null
 
     const confirmed: { id: number; quantity: number }[] = []
     for (let i = 0; i < items.length; i++) {
       const it = items[i]
-      const { data, error } = await supabase.functions.invoke('ai-stockin-confirm', {
-        body: {
-          logId: it.logId, locationId,
-          category: it.category, itemName: it.itemName, specification: it.specification,
-          quantity: it.quantity, unit: it.unit, stockType: it.stockType,
-          expirationDate: it.stockType === 'NoExpiry' ? '' : it.expirationDate,
-          safetyStock: it.safetyStock, remark: it.remark,
-        },
-      })
-      if (error || !data?.success) {
-        setBusy(false)
-        setMessage({ ok: false, text: `品項 ${i + 1}「${it.itemName}」入庫失敗：${data?.message ?? await functionErrorMessage(error, '確認失敗')}（前 ${confirmed.length} 項已入庫）` })
-        return
-      }
-      if (data.item?.id) {
-        confirmed.push({ id: data.item.id, quantity: data.item.quantity })
-        // 入庫來源紀錄：AI 智慧入庫也留一筆（無捐贈人），與一般入庫一致。
+      if (it.logId > 0) {
+        // AI 辨識項目：走 ai-stockin-confirm（會標記該筆 log 已確認並建立庫存）
+        const { data, error } = await supabase.functions.invoke('ai-stockin-confirm', {
+          body: {
+            logId: it.logId, locationId,
+            category: it.category, itemName: it.itemName, specification: it.specification,
+            quantity: it.quantity, unit: it.unit, stockType: it.stockType,
+            expirationDate: it.stockType === 'NoExpiry' ? '' : it.expirationDate,
+            safetyStock: it.safetyStock, remark: it.remark,
+          },
+        })
+        if (error || !data?.success) {
+          setBusy(false)
+          setMessage({ ok: false, text: `品項 ${i + 1}「${it.itemName}」入庫失敗：${data?.message ?? await functionErrorMessage(error, '確認失敗')}（前 ${confirmed.length} 項已入庫）` })
+          return
+        }
+        if (data.item?.id) {
+          confirmed.push({ id: data.item.id, quantity: data.item.quantity })
+          await supabase.from('supply_stock_in_log').insert({
+            supply_item_id: data.item.id, location_id: locationId,
+            stock_in_quantity: data.item.quantity, operator, remark: 'AI 智慧入庫',
+          })
+        }
+      } else {
+        // 手動新增品項：直接寫入庫存（RLS 依角色/據點），不經 ai-stockin-confirm
+        const res = await supabase.from('supply_item').insert({
+          category: it.category.trim(), item_name: it.itemName.trim(),
+          specification: it.specification.trim() || null, unit: it.unit.trim() || '個',
+          stock_type: it.stockType, quantity: Number(it.quantity),
+          expiration_date: it.stockType === 'NoExpiry' ? null : it.expirationDate,
+          location_id: locationId, safety_stock: Number(it.safetyStock) || 0,
+          remark: it.remark.trim() || null, created_by: operator,
+        }).select('id').single()
+        if (res.error || !res.data) {
+          setBusy(false)
+          setMessage({ ok: false, text: `品項 ${i + 1}「${it.itemName}」手動入庫失敗：${res.error?.message ?? '寫入失敗'}（前 ${confirmed.length} 項已入庫）` })
+          return
+        }
+        confirmed.push({ id: res.data.id, quantity: Number(it.quantity) })
         await supabase.from('supply_stock_in_log').insert({
-          supply_item_id: data.item.id, location_id: locationId,
-          stock_in_quantity: data.item.quantity,
-          operator: profile?.display_name ?? profile?.username ?? null, remark: 'AI 智慧入庫',
+          supply_item_id: res.data.id, location_id: locationId,
+          stock_in_quantity: Number(it.quantity), operator, remark: '手動新增（AI 入庫頁）',
         })
       }
     }
@@ -224,7 +265,10 @@ export function AIStockInCreate() {
             )}
           </div></div>
 
-          <div className="d-flex justify-content-end">
+          <div className="d-flex justify-content-between gap-2 flex-wrap">
+            <button type="button" className="btn btn-outline-primary btn-lg" disabled={busy} onClick={addManualItem}>
+              <i className="bi bi-pencil-square" /> 改用手動輸入
+            </button>
             <button className="btn btn-primary btn-lg" disabled={busy || (!inputText.trim() && !image)}>
               {busy ? '辨識中…' : '開始辨識'}
             </button>
@@ -242,16 +286,17 @@ export function AIStockInCreate() {
 
               {items.map((it, idx) => (
                 <div key={it.logId} className="card shadow-sm mb-3">
-                  <div className="card-header bg-light d-flex justify-content-between align-items-center">
-                    <span>
-                      <i className="bi bi-box" /> 品項 {idx + 1}
-                      {it.confidence != null && <span className={`badge ms-2 bg-${it.confidence >= 0.7 ? 'success' : it.confidence >= 0.5 ? 'warning text-dark' : 'secondary'}`}>信心 {Math.round(it.confidence * 100)}%</span>}
-                    </span>
+                  <div className="card-header bg-light d-flex align-items-center gap-2">
                     {items.length > 1 && (
-                      <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeItem(it.logId)}>
+                      <button type="button" className="btn btn-sm" style={{ backgroundColor: '#A8E6CF', color: '#1b5e20', border: 'none' }} onClick={() => removeItem(it.logId)}>
                         <i className="bi bi-trash" /> 不入庫此項
                       </button>
                     )}
+                    <span>
+                      <i className="bi bi-box" /> 品項 {idx + 1}
+                      {it.logId <= 0 && <span className="badge ms-2 bg-info text-dark">手動</span>}
+                      {it.confidence != null && <span className={`badge ms-2 bg-${it.confidence >= 0.7 ? 'success' : it.confidence >= 0.5 ? 'warning text-dark' : 'secondary'}`}>信心 {Math.round(it.confidence * 100)}%</span>}
+                    </span>
                   </div>
                   <div className="card-body">
                     <div className="row g-3">
@@ -282,9 +327,14 @@ export function AIStockInCreate() {
                 </div>
               ))}
 
-              <div className="d-flex justify-content-end gap-2">
-                <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => { setItems(null); setMessage(null) }}>重新辨識</button>
-                <button className="btn btn-success" disabled={busy}>{busy ? '入庫中…' : `確認並正式入庫（${items.length} 項）`}</button>
+              <div className="d-flex justify-content-between gap-2 flex-wrap">
+                <button type="button" className="btn btn-outline-primary" disabled={busy} onClick={addManualItem}>
+                  <i className="bi bi-plus-circle" /> 新增品項（手動）
+                </button>
+                <div className="d-flex gap-2">
+                  <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => { setItems(null); setMessage(null) }}>重新辨識</button>
+                  <button className="btn btn-success" disabled={busy}>{busy ? '入庫中…' : `確認並正式入庫（${items.length} 項）`}</button>
+                </div>
               </div>
             </div>
 

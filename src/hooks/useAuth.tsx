@@ -63,6 +63,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => listener.subscription.unsubscribe()
   }, [])
 
+  // 全體使用者：閒置超過 30 分鐘（無滑鼠/鍵盤/觸控/捲動）自動登出。
+  useEffect(() => {
+    if (!session) return
+    const IDLE_MS = 30 * 60 * 1000
+    let timer: ReturnType<typeof setTimeout>
+    const reset = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => { void supabase.auth.signOut() }, IDLE_MS)
+    }
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'] as const
+    events.forEach((ev) => window.addEventListener(ev, reset, { passive: true }))
+    reset()
+    return () => {
+      clearTimeout(timer)
+      events.forEach((ev) => window.removeEventListener(ev, reset))
+    }
+  }, [session])
+
   async function signIn(username: string, password: string): Promise<{ error: string | null }> {
     const email = `${username.trim()}${SYNTHETIC_EMAIL_SUFFIX}`
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
