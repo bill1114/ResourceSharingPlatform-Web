@@ -286,17 +286,17 @@ export function AIStockInCreate() {
 
               {items.map((it, idx) => (
                 <div key={it.logId} className="card shadow-sm mb-3">
-                  <div className="card-header bg-light d-flex align-items-center gap-2">
-                    {items.length > 1 && (
-                      <button type="button" className="btn btn-sm" style={{ backgroundColor: '#A8E6CF', color: '#1b5e20', border: 'none' }} onClick={() => removeItem(it.logId)}>
-                        <i className="bi bi-trash" /> 不入庫此項
-                      </button>
-                    )}
+                  <div className="card-header bg-light d-flex justify-content-between align-items-center">
                     <span>
                       <i className="bi bi-box" /> 品項 {idx + 1}
                       {it.logId <= 0 && <span className="badge ms-2 bg-info text-dark">手動</span>}
                       {it.confidence != null && <span className={`badge ms-2 bg-${it.confidence >= 0.7 ? 'success' : it.confidence >= 0.5 ? 'warning text-dark' : 'secondary'}`}>信心 {Math.round(it.confidence * 100)}%</span>}
                     </span>
+                    {items.length > 1 && (
+                      <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeItem(it.logId)}>
+                        <i className="bi bi-trash" /> 不入庫此項
+                      </button>
+                    )}
                   </div>
                   <div className="card-body">
                     <div className="row g-3">

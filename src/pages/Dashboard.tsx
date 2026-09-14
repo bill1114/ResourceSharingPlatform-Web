@@ -151,44 +151,46 @@ export function Dashboard() {
 
       {/* p.9 色塊改色：四種狀態統一配色（藍/紅/黃/鐵灰），共用 lib/statusColors */}
       <div className="row g-3 mb-4">
-        {AllDashboardStatuses.map((key) => {
-          // 小幫手：把「總量不足／啟動募資」換成「據點總物資」（只看自己所屬據點）。
-          if (isSocialWorker && key === 'globalLowStock') {
-            const mine = locationSummaries.find((s) => s.locationId === myLoc)
-            return (
-              <div className="col-md-3" key="locationTotal">
-                <Link to={`/supply-items?locationId=${myLoc ?? ''}`} className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle('locationLowStock')}>
-                  <div className="card-body">
-                    <h6><i className="bi bi-box-seam" /> 據點總物資</h6>
-                    <h2 className="mb-0">{mine?.totalQuantity ?? 0}</h2>
-                    <small style={{ opacity: 0.85 }}>{mine?.locationName ?? '我的據點'}　點擊查看 →</small>
-                  </div>
-                </Link>
-              </div>
-            )
-          }
-          const c = statusColorMap[key]
-          const count: Record<DashboardStatusKey, number> = {
-            locationLowStock: lowStockItemCount,
-            globalLowStock: globalLowStockCount,
-            expiringSoon: expiringSoonCount,
-            expired: expiredCount,
-          }
+        {/* 小幫手：最左邊放「據點總物資」（馬卡龍綠，只看自己所屬據點），並移除總量不足卡 */}
+        {isSocialWorker && (() => {
+          const mine = locationSummaries.find((s) => s.locationId === myLoc)
           return (
-            <div className="col-md-3" key={key}>
-              {/* p.2：色塊本身可點擊，跳到該狀態清單頁 */}
-              <Link to={`/status/${key}`} className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle(key)}>
+            <div className="col-md-3" key="locationTotal">
+              <Link to={`/supply-items?locationId=${myLoc ?? ''}`} className="card shadow-sm border-0 h-100 text-decoration-none" style={{ backgroundColor: '#A8E6CF', color: '#1b5e20' }}>
                 <div className="card-body">
-                  <h6>
-                    <i className={`bi ${c.icon}`} /> {c.label}
-                  </h6>
-                  <h2 className="mb-0">{count[key]}</h2>
-                  <small style={{ opacity: 0.85 }}>點擊查看清單 →</small>
+                  <h6><i className="bi bi-box-seam" /> 據點總物資</h6>
+                  <h2 className="mb-0">{mine?.totalQuantity ?? 0}</h2>
+                  <small style={{ opacity: 0.85 }}>{mine?.locationName ?? '我的據點'}　點擊查看 →</small>
                 </div>
               </Link>
             </div>
           )
-        })}
+        })()}
+        {AllDashboardStatuses
+          .filter((key) => !(isSocialWorker && key === 'globalLowStock'))
+          .map((key) => {
+            const c = statusColorMap[key]
+            const count: Record<DashboardStatusKey, number> = {
+              locationLowStock: lowStockItemCount,
+              globalLowStock: globalLowStockCount,
+              expiringSoon: expiringSoonCount,
+              expired: expiredCount,
+            }
+            return (
+              <div className="col-md-3" key={key}>
+                {/* p.2：色塊本身可點擊，跳到該狀態清單頁 */}
+                <Link to={`/status/${key}`} className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle(key)}>
+                  <div className="card-body">
+                    <h6>
+                      <i className={`bi ${c.icon}`} /> {c.label}
+                    </h6>
+                    <h2 className="mb-0">{count[key]}</h2>
+                    <small style={{ opacity: 0.85 }}>點擊查看清單 →</small>
+                  </div>
+                </Link>
+              </div>
+            )
+          })}
       </div>
 
       <div className="row mb-4">
