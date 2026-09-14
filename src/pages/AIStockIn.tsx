@@ -160,10 +160,37 @@ export function AIStockInCreate() {
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h2><i className="bi bi-stars" /> AI 智慧入庫</h2>
-        <Link className="btn btn-outline-secondary" to="/ai-stockin"><i className="bi bi-list-ul" /> 辨識紀錄</Link>
+        <div className="d-flex gap-2">
+          <button type="button" className="btn btn-outline-secondary" onClick={() => navigate(-1)}><i className="bi bi-arrow-left" /> 返回上一頁</button>
+          <Link className="btn btn-outline-secondary" to="/ai-stockin"><i className="bi bi-list-ul" /> 辨識紀錄</Link>
+        </div>
       </div>
 
-      {message && <div className={`alert alert-${message.ok ? 'success' : 'danger'}`}>{message.text}</div>}
+      {/* 辨識中狀態 */}
+      {busy && !items && (
+        <div className="alert alert-info d-flex align-items-center">
+          <span className="spinner-border spinner-border-sm me-2" role="status" /> AI 辨識中，請稍候…
+        </div>
+      )}
+
+      {message && (
+        <div className={`alert alert-${message.ok ? 'success' : 'danger'}`}>
+          <div>{message.ok ? '' : '辨識失敗：'}{message.text}</div>
+          {!message.ok && (
+            <div className="mt-2 d-flex gap-2 flex-wrap">
+              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setMessage(null)}>
+                <i className="bi bi-pencil" /> 重新輸入再試
+              </button>
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => window.location.reload()}>
+                <i className="bi bi-arrow-clockwise" /> 重新整理
+              </button>
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => navigate(-1)}>
+                <i className="bi bi-arrow-left" /> 返回上一頁
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {!items ? (
         // ── 步驟一：辨識來源 ─────────────────────────────

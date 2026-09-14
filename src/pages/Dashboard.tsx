@@ -48,6 +48,8 @@ export function Dashboard() {
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
   const isAdminOrCadre = isAdmin || profile?.role_name === Roles.Cadre
+  const isSocialWorker = profile?.role_name === Roles.SocialWorker
+  const myLoc = profile?.location_id ?? null
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [lowStockItemCount, setLowStockItemCount] = useState(0)
   const [globalLowStockCount, setGlobalLowStockCount] = useState(0)
@@ -137,6 +139,9 @@ export function Dashboard() {
     )
   }
 
+  // 待處理需求：總管看全部，其他單位（幫主）只看自己據點提出的。
+  const visibleRequests = isAdmin ? requests : requests.filter((r) => r.requesting_location_id === myLoc)
+
   return (
     <div className="container-fluid mt-4">
       <h2 className="mb-4">
@@ -147,6 +152,21 @@ export function Dashboard() {
       {/* p.9 色塊改色：四種狀態統一配色（藍/紅/黃/鐵灰），共用 lib/statusColors */}
       <div className="row g-3 mb-4">
         {AllDashboardStatuses.map((key) => {
+          // 小幫手：把「總量不足／啟動募資」換成「據點總物資」（只看自己所屬據點）。
+          if (isSocialWorker && key === 'globalLowStock') {
+            const mine = locationSummaries.find((s) => s.locationId === myLoc)
+            return (
+              <div className="col-md-3" key="locationTotal">
+                <Link to={`/supply-items?locationId=${myLoc ?? ''}`} className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle('locationLowStock')}>
+                  <div className="card-body">
+                    <h6><i className="bi bi-box-seam" /> 據點總物資</h6>
+                    <h2 className="mb-0">{mine?.totalQuantity ?? 0}</h2>
+                    <small style={{ opacity: 0.85 }}>{mine?.locationName ?? '我的據點'}　點擊查看 →</small>
+                  </div>
+                </Link>
+              </div>
+            )
+          }
           const c = statusColorMap[key]
           const count: Record<DashboardStatusKey, number> = {
             locationLowStock: lowStockItemCount,
@@ -238,10 +258,10 @@ export function Dashboard() {
         <div className="col-12 mb-4">
           <div className="card shadow-sm">
             <div className="card-header" style={{ backgroundColor: statusColorMap.locationLowStock.bg, color: statusColorMap.locationLowStock.text }}>
-              <i className="bi bi-hand-index-thumb" /> 待處理需求（{requests.length}）
+              <i className="bi bi-hand-index-thumb" /> 待處理需求（{visibleRequests.length}）
             </div>
             <div className="card-body">
-              {requests.length === 0 ? (
+              {visibleRequests.length === 0 ? (
                 <p className="text-muted mb-0">目前沒有待處理的缺料需求</p>
               ) : (
                 <div className="table-responsive">
@@ -258,7 +278,7 @@ export function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {requests.map((r) => {
+                      {visibleRequests.map((r) => {
                         const isDisposal = r.request_type === 'disposal'
                         return (
                         <tr key={r.id}>

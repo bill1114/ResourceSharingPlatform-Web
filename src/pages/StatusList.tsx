@@ -297,12 +297,12 @@ export function StatusList() {
                       <td>{r.expiration ?? (r.stock_type ? <span className={`badge ${stockTypeBadgeClass(r.stock_type)}`}>{stockTypeDisplayName(r.stock_type)}</span> : r.note ?? '—')}</td>
                       <td className="text-center">
                         {status === 'expired' ? (
-                          // 已過期：總管直接報廢；幫主向總管申請報廢（請求，非直接操作）；小幫手無動作。
+                          // 已過期：總管直接報廢（不限據點）；幫主只能對「自己據點」申請報廢；其餘無動作。
                           isAdmin && r.id != null ? (
                             <Link className="btn btn-sm btn-dark" to={`/disposals/create?supplyItemId=${r.id}`}>
                               <i className="bi bi-trash3" /> 報廢
                             </Link>
-                          ) : isCadre && r.id != null ? (
+                          ) : isCadre && r.id != null && r.locationId === myLocId ? (
                             <button className="btn btn-sm btn-primary" onClick={() => void requestDisposal(r)}>
                               <i className="bi bi-hand-index-thumb" /> 舉手
                             </button>
