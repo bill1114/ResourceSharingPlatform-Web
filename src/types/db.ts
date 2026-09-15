@@ -11,6 +11,7 @@ export interface Profile {
   role_name: Role
   location_id: number | null
   is_active: boolean
+  password_changed_at: string | null
   created_at: string
   updated_at: string | null
 }

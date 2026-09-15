@@ -10,23 +10,26 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  // 忘記密碼
+  // 忘記密碼：核對帳號後，直接由本人設定新密碼（總管端會看到「7 天內改過密碼」提示）。
   const [showForgot, setShowForgot] = useState(false)
   const [forgotName, setForgotName] = useState('')
-  const [forgotNote, setForgotNote] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
   const [forgotMsg, setForgotMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [forgotBusy, setForgotBusy] = useState(false)
 
   async function submitForgot(e: FormEvent) {
     e.preventDefault()
     if (!forgotName.trim()) return
+    if (newPw.length < 6) { setForgotMsg({ ok: false, text: '新密碼至少 6 碼' }); return }
+    if (newPw !== confirmPw) { setForgotMsg({ ok: false, text: '兩次輸入的新密碼不一致' }); return }
     setForgotBusy(true)
     setForgotMsg(null)
-    const { error } = await supabase.from('password_reset_request').insert({ username: forgotName.trim(), note: forgotNote.trim() || null })
+    const { data, error } = await supabase.functions.invoke('password-self-reset', { body: { username: forgotName.trim(), newPassword: newPw } })
     setForgotBusy(false)
-    if (error) { setForgotMsg({ ok: false, text: '送出失敗，請稍後再試或直接聯絡管理員。' }); return }
-    setForgotMsg({ ok: true, text: '已通知管理員（總管），請等候協助重設密碼。' })
-    setForgotName(''); setForgotNote('')
+    if (error || !data?.success) { setForgotMsg({ ok: false, text: data?.message ?? '重設失敗，請稍後再試或聯絡管理員。' }); return }
+    setForgotMsg({ ok: true, text: '密碼已更新，請用新密碼登入。' })
+    setForgotName(''); setNewPw(''); setConfirmPw('')
   }
 
   // 登入後一律導向戰情總覽（/）；唯一例外是 LINE 圖文選單的 /mobile/* 深連結，
@@ -96,7 +99,7 @@ export function Login() {
 
           {showForgot && (
             <div className="border rounded p-3 mt-2 bg-light">
-              <div className="small text-muted mb-2">送出後由管理員（總管）確認並協助重設密碼，系統不會自動改密碼。</div>
+              <div className="small text-muted mb-2">輸入你的帳號並設定新密碼即可立即生效。管理員（總管）會看到你近期改過密碼作為把關。</div>
               {forgotMsg && <div className={`alert alert-${forgotMsg.ok ? 'success' : 'danger'} py-2`}>{forgotMsg.text}</div>}
               <form onSubmit={submitForgot}>
                 <div className="mb-2">
@@ -104,11 +107,15 @@ export function Login() {
                   <input className="form-control form-control-sm" required value={forgotName} onChange={(e) => setForgotName(e.target.value)} />
                 </div>
                 <div className="mb-2">
-                  <label className="form-label">說明（選填）</label>
-                  <input className="form-control form-control-sm" placeholder="例如：忘記密碼、需要重設" value={forgotNote} onChange={(e) => setForgotNote(e.target.value)} />
+                  <label className="form-label">新密碼 *（至少 6 碼）</label>
+                  <input type="password" className="form-control form-control-sm" required value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+                </div>
+                <div className="mb-2">
+                  <label className="form-label">確認新密碼 *</label>
+                  <input type="password" className="form-control form-control-sm" required value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
                 </div>
                 <button type="submit" className="btn btn-outline-primary btn-sm w-100" disabled={forgotBusy}>
-                  {forgotBusy ? '送出中…' : '送出忘記密碼申請'}
+                  {forgotBusy ? '重設中…' : '重設密碼'}
                 </button>
               </form>
             </div>
