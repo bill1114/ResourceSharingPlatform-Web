@@ -133,6 +133,11 @@ export function AppShell() {
                             <i className="bi bi-heart" /> 捐贈分析
                           </NavLink>
                         </li>
+                        <li>
+                          <NavLink className="dropdown-item" to="/analytics">
+                            <i className="bi bi-bar-chart-line" /> 分析中心
+                          </NavLink>
+                        </li>
                       </>
                     )}
                   </ul>

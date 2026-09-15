@@ -17,6 +17,7 @@ import { RecipientAnalysis } from './pages/RecipientAnalysis'
 import { DonorAnalysis } from './pages/DonorAnalysis'
 import { ItemLedger } from './pages/ItemLedger'
 import { ActivityLog } from './pages/ActivityLog'
+import { AnalyticsHub } from './pages/AnalyticsHub'
 import { AccountManagement } from './pages/AccountManagement'
 import { LineSettings, AISettings } from './pages/AdminSettings'
 import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
@@ -85,6 +86,7 @@ function App() {
         <Route path="/outbound" element={<SupplyOutboundIndex />} />
         <Route path="/outbound/recipient-analysis" element={<RoleGate roles={[Roles.Admin]}><RecipientAnalysis /></RoleGate>} />
         <Route path="/donations/donor-analysis" element={<RoleGate roles={[Roles.Admin]}><DonorAnalysis /></RoleGate>} />
+        <Route path="/analytics" element={<RoleGate roles={[Roles.Admin]}><AnalyticsHub /></RoleGate>} />
         <Route path="/donations" element={<RoleGate roles={[Roles.Admin]}><SupplyDonationIndex /></RoleGate>} />
         <Route
           path="/disposals/create"
