@@ -53,7 +53,7 @@ export function InventoryTypes() {
   async function load() {
     setLoading(true)
     const [defRes, varRes, locRes, safetyRes] = await Promise.all([
-      supabase.from('inventory_item_definition').select('*').order('category').order('item_name'),
+      supabase.from('inventory_item_definition').select('*').order('sort_order', { ascending: true }).order('category').order('item_name'),
       supabase.from('inventory_item_variant').select('*'),
       supabase.from('supply_location').select('*').eq('is_active', true).order('id'),
       supabase.from('location_inventory_safety_stock').select('*'),
@@ -86,6 +86,28 @@ export function InventoryTypes() {
     setKeyword('')
     setStockTypeFilter('')
     setStatusFilter('')
+  }
+
+  // #3：拖拉排序（僅在未套用篩選時開放，避免只重排子集造成混亂）。
+  const canReorder = !keyword.trim() && !stockTypeFilter && !statusFilter
+  const [dragId, setDragId] = useState<number | null>(null)
+  async function persistOrder(arr: InventoryItemDefinition[]) {
+    await Promise.all(arr.map((d, i) => supabase.from('inventory_item_definition').update({ sort_order: i }).eq('id', d.id)))
+    void logActivity({ action: 'inventory_reorder', category: '資料維護', targetTable: 'inventory_item_definition', summary: '調整庫存種類顯示順序' })
+  }
+  function handleDropOn(targetId: number) {
+    if (dragId == null || dragId === targetId) { setDragId(null); return }
+    setDefinitions((prev) => {
+      const arr = [...prev]
+      const from = arr.findIndex((d) => d.id === dragId)
+      const to = arr.findIndex((d) => d.id === targetId)
+      if (from < 0 || to < 0) return prev
+      const [moved] = arr.splice(from, 1)
+      arr.splice(to, 0, moved)
+      void persistOrder(arr)
+      return arr
+    })
+    setDragId(null)
   }
 
   function activeVariantCount(defId: number): number {
@@ -361,6 +383,7 @@ export function InventoryTypes() {
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
                 <tr>
+                  <th className="col-min" title="拖拉調整順序"><i className="bi bi-arrows-move" /></th>
                   <th>物資種類</th>
                   <th>物資名稱</th>
                   <th>庫存分類</th>
@@ -375,19 +398,29 @@ export function InventoryTypes() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="text-center text-muted py-4">
+                    <td colSpan={10} className="text-center text-muted py-4">
                       載入中…
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center text-muted py-4">
+                    <td colSpan={10} className="text-center text-muted py-4">
                       尚未建立庫存種類
                     </td>
                   </tr>
                 ) : (
                   filtered.map((def) => (
-                    <tr key={def.id}>
+                    <tr
+                      key={def.id}
+                      draggable={canReorder}
+                      onDragStart={() => canReorder && setDragId(def.id)}
+                      onDragOver={(e) => { if (canReorder) e.preventDefault() }}
+                      onDrop={() => canReorder && handleDropOn(def.id)}
+                      style={canReorder && dragId === def.id ? { opacity: 0.5 } : undefined}
+                    >
+                      <td className="col-min text-center text-muted" style={{ cursor: canReorder ? 'grab' : 'not-allowed' }} title={canReorder ? '拖拉調整順序' : '清除篩選後才能拖拉排序'}>
+                        <i className="bi bi-grip-vertical" />
+                      </td>
                       <td>{def.category}</td>
                       <td>
                         <strong>{def.item_name}</strong>

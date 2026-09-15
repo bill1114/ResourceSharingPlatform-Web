@@ -36,6 +36,7 @@ export interface InventoryItemDefinition {
   global_safety_stock: number
   stock_type: string
   is_active: boolean
+  sort_order: number
   created_at: string
   updated_at: string | null
 }
