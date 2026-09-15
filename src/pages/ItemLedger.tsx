@@ -77,6 +77,7 @@ export function ItemLedger() {
   const [typeFilter, setTypeFilter] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [showHidden, setShowHidden] = useState(false) // #4：顯示數量0超過7天的批次
 
   // 調整（盤點修正）視窗
   const [adjustItem, setAdjustItem] = useState<LedgerItem | null>(null)
@@ -182,18 +183,33 @@ export function ItemLedger() {
     void load()
   }, [])
 
+  // #4：批次目前數量為 0、且最後一次異動已超過 7 天 → 視為長期零庫存，預設隱藏。
+  const longZeroItemIds = useMemo(() => {
+    const lastTime = new Map<number, number>()
+    for (const e of entries) {
+      const t = new Date(e.time).getTime()
+      if (!lastTime.has(e.itemId) || t > (lastTime.get(e.itemId) ?? 0)) lastTime.set(e.itemId, t)
+    }
+    const ids = new Set<number>()
+    for (const e of entries) {
+      if (e.currentQty === 0 && Date.now() - (lastTime.get(e.itemId) ?? 0) > 7 * 86400000) ids.add(e.itemId)
+    }
+    return ids
+  }, [entries])
+
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase()
     return entries.filter((e) => {
       // 幫主只看自己據點的明細（總管不限）。
       if (!isAdmin && myLocId != null && e.locationId !== myLocId) return false
+      if (!showHidden && longZeroItemIds.has(e.itemId)) return false
       if (locationFilter && e.locationId !== Number(locationFilter)) return false
       if (typeFilter && e.type !== typeFilter) return false
       if (!withinRange(e.time, fromDate, toDate)) return false
       if (k && !`${e.category} ${e.itemName} ${e.specification ?? ''}`.toLowerCase().includes(k)) return false
       return true
     })
-  }, [entries, keyword, locationFilter, typeFilter, fromDate, toDate, isAdmin, myLocId])
+  }, [entries, keyword, locationFilter, typeFilter, fromDate, toDate, isAdmin, myLocId, showHidden, longZeroItemIds])
 
   function handleExport() {
     exportToExcel<LedgerEntry>('物資明細', '物資明細', [
@@ -261,9 +277,15 @@ export function ItemLedger() {
         <h2 className="mb-0">
           <i className="bi bi-clock-history" /> 物資明細
         </h2>
-        <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
-          <i className="bi bi-file-earmark-excel" /> 匯出 Excel
-        </button>
+        <div className="d-flex gap-2">
+          {/* #4：數量0超過7天的批次預設隱藏；用眼睛切換 */}
+          <button type="button" className={`btn ${showHidden ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setShowHidden((v) => !v)} title="數量0超過7天的批次">
+            <i className={`bi ${showHidden ? 'bi-eye-slash' : 'bi-eye'}`} /> {showHidden ? '隱藏零庫存過久' : `顯示已隱藏${longZeroItemIds.size > 0 ? `（${longZeroItemIds.size}）` : ''}`}
+          </button>
+          <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
+            <i className="bi bi-file-earmark-excel" /> 匯出 Excel
+          </button>
+        </div>
       </div>
       <p className="text-muted">每一筆物資從入庫到後續 領用／捐贈／報廢／轉移／調整 的完整異動歷程（總管專用）。</p>
       <FlashMessage />

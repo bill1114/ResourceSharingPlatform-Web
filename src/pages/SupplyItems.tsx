@@ -12,6 +12,8 @@ import { locationColorStyle } from '../lib/colors'
 import { FlashMessage } from '../components/FlashMessage'
 import { exportToExcel } from '../lib/excelExport'
 import { DateSelect } from '../components/DateSelect'
+import { DateRangeFilter } from '../components/DateRangeFilter'
+import { withinRange } from '../lib/dateRange'
 import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
 import { EXPIRY_WARNING_DAYS } from '../lib/stockBatch'
 import { logActivity } from '../lib/activityLog'
@@ -161,6 +163,9 @@ export function SupplyItems() {
   // 狀態篩選：'' 全部 / lowStock 低庫存 / expiringSoon 即將即期 / globalLow 總量不足 / expired 已過期
   const [statusFilter, setStatusFilter] = useState('')
   const [summaryOpen, setSummaryOpen] = useState(true)
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [showHidden, setShowHidden] = useState(false) // #4：顯示「數量0超過7天」被隱藏的批次
 
   // 從戰情總覽「查看物資」帶入的據點篩選（?locationId=）
   useEffect(() => {
@@ -224,12 +229,21 @@ export function SupplyItems() {
     }
   }
 
-  const filteredItems = useMemo(() => {
+  // #4：數量為 0 且超過 7 天未異動（updated_at/建立時間）視為「長期零庫存」，預設隱藏。
+  function isLongZero(i: SupplyItem): boolean {
+    if (i.quantity !== 0) return false
+    const last = i.updated_at ?? i.created_at
+    if (!last) return false
+    return Date.now() - new Date(last).getTime() > 7 * 86400000
+  }
+
+  const baseFiltered = useMemo(() => {
     return items.filter((i) => {
       if (locationFilter && i.location_id !== Number(locationFilter)) return false
       if (categoryFilter && i.category !== categoryFilter) return false
       if (stockTypeFilter && i.stock_type !== stockTypeFilter) return false
       if (!matchesStatus(i)) return false
+      if (!withinRange(i.created_at, fromDate, toDate)) return false // #1：入庫時間區間
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase()
         const matches =
@@ -242,7 +256,13 @@ export function SupplyItems() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, keyword, locationFilter, categoryFilter, stockTypeFilter, statusFilter, lowStock, globalLowKeys])
+  }, [items, keyword, locationFilter, categoryFilter, stockTypeFilter, statusFilter, lowStock, globalLowKeys, fromDate, toDate])
+
+  const hiddenCount = useMemo(() => baseFiltered.filter(isLongZero).length, [baseFiltered])
+  const filteredItems = useMemo(
+    () => (showHidden ? baseFiltered : baseFiltered.filter((i) => !isLongZero(i))),
+    [baseFiltered, showHidden]
+  )
 
   // 依物資統計（跨據點加總）：對目前篩選結果依物資名稱分組
   const itemSummary = useMemo<ItemSummaryRow[]>(() => {
@@ -289,6 +309,8 @@ export function SupplyItems() {
     setCategoryFilter('')
     setStockTypeFilter('')
     setStatusFilter('')
+    setFromDate('')
+    setToDate('')
   }
 
   function locationName(id: number): string {
@@ -332,6 +354,10 @@ export function SupplyItems() {
           {isCadre && <span className="badge bg-info text-dark ms-2 align-middle fs-6">僅可操作自己據點</span>}
         </h2>
         <div className="d-flex gap-2">
+          {/* #4：數量0超過7天的批次預設隱藏；用眼睛切換顯示/隱藏 */}
+          <button type="button" className={`btn ${showHidden ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setShowHidden((v) => !v)} title="數量0超過7天的批次">
+            <i className={`bi ${showHidden ? 'bi-eye-slash' : 'bi-eye'}`} /> {showHidden ? '隱藏零庫存過久' : `顯示已隱藏${hiddenCount > 0 ? `（${hiddenCount}）` : ''}`}
+          </button>
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filteredItems.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
           </button>
@@ -419,6 +445,10 @@ export function SupplyItems() {
               <button type="button" className="btn btn-secondary w-100" onClick={resetFilters}>
                 <i className="bi bi-arrow-clockwise" /> 重設
               </button>
+            </div>
+            <div className="col-12">
+              <label className="form-label">入庫日期區間</label>
+              <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
             </div>
           </div>
         </div>
