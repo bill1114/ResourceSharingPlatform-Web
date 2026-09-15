@@ -6,7 +6,7 @@
 //   調整 = 盤點修正該批次目前數量（走 stock_adjust RPC，留一筆「調整」）。
 //   刪除 = 只對「調整」列開放，回算庫存（走 stock_adjust_delete RPC）。
 // 領用／報廢／轉移不在這裡刪，請走各自的回庫／取消流程。
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { exportToExcel } from '../lib/excelExport'
@@ -78,6 +78,7 @@ export function ItemLedger() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [showHidden, setShowHidden] = useState(false) // #4：顯示數量0超過7天的批次
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set()) // #2：展開的分組
 
   // 調整（盤點修正）視窗
   const [adjustItem, setAdjustItem] = useState<LedgerItem | null>(null)
@@ -210,6 +211,31 @@ export function ItemLedger() {
       return true
     })
   }, [entries, keyword, locationFilter, typeFilter, fromDate, toDate, isAdmin, myLocId, showHidden, longZeroItemIds])
+
+  // #2：把篩選後的異動依「種類/名稱/規格」分組，收合顯示、展開才看明細。
+  const grouped = useMemo(() => {
+    const m = new Map<string, { key: string; category: string; itemName: string; specification: string | null; entries: LedgerEntry[] }>()
+    for (const e of filtered) {
+      const key = `${e.category}|${e.itemName}|${e.specification ?? ''}`
+      let g = m.get(key)
+      if (!g) { g = { key, category: e.category, itemName: e.itemName, specification: e.specification, entries: [] }; m.set(key, g) }
+      g.entries.push(e)
+    }
+    return [...m.values()]
+  }, [filtered])
+
+  function toggleGroup(key: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
+  function groupCurrentTotal(entries: LedgerEntry[]): number {
+    const batch = new Map<number, number>()
+    for (const e of entries) batch.set(e.itemId, e.currentQty)
+    return [...batch.values()].reduce((a, b) => a + b, 0)
+  }
 
   function handleExport() {
     exportToExcel<LedgerEntry>('物資明細', '物資明細', [
@@ -357,47 +383,71 @@ export function ItemLedger() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={10} className="text-center py-4 text-muted">載入中…</td></tr>
-                ) : filtered.length === 0 ? (
+                ) : grouped.length === 0 ? (
                   <tr><td colSpan={10} className="text-center py-4 text-muted">沒有符合條件的異動</td></tr>
                 ) : (
-                  filtered.map((e) => (
-                    <tr key={e.key}>
-                      <td className="col-min text-muted">#{e.itemId}</td>
-                      <td>{e.category}</td>
-                      <td><strong>{e.itemName}</strong></td>
-                      <td>{e.specification ?? '無'}</td>
-                      <td className="col-min"><span className={`badge ${typeBadge[e.type]}`}>{e.type}</span></td>
-                      <td className={`col-min text-end ${e.delta == null ? '' : e.delta >= 0 ? 'text-success' : 'text-danger'}`}>
-                        {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta}` : e.delta} {e.delta == null ? '' : e.unit ?? ''}
-                      </td>
-                      <td>{e.detail}</td>
-                      <td className="col-min text-end">{e.runningQty} {e.unit ?? ''}</td>
-                      <td className="col-min">
-                        <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
-                      </td>
-                      <td className="col-min text-nowrap">
-                        {canAdjust(e.locationId) ? (
-                          <>
-                            <button className="btn btn-sm btn-outline-secondary me-1" title="盤點調整此批次數量" onClick={() => openAdjust(e.itemId)}>
-                              <i className="bi bi-sliders" /> 調整
-                            </button>
-                            {e.type === '調整' && e.adjustmentLogId != null && (
-                              <button className="btn btn-sm btn-outline-danger" title="刪除此調整並回算" onClick={() => void deleteAdjust(e.adjustmentLogId!)}>
-                                <i className="bi bi-trash" />
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-muted small">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                  grouped.map((g) => {
+                    const open = expandedGroups.has(g.key)
+                    return (
+                      <Fragment key={g.key}>
+                        {/* 分組表頭：同種類/名稱/規格收合，點擊展開看操作明細 */}
+                        <tr style={{ cursor: 'pointer' }} className="table-light" onClick={() => toggleGroup(g.key)}>
+                          <td colSpan={7}>
+                            <i className={`bi ${open ? 'bi-chevron-down' : 'bi-chevron-right'} me-2`} />
+                            <span className="text-muted">{g.category}</span>　<strong>{g.itemName}</strong>
+                            <span>{g.specification ?? '無'}</span>
+                            <span className="badge bg-secondary ms-2">{g.entries.length} 筆異動</span>
+                          </td>
+                          <td className="col-min text-end"><strong>{groupCurrentTotal(g.entries)}</strong></td>
+                          <td colSpan={2} className="text-muted small">{open ? '點擊收合' : '點擊展開明細'}</td>
+                        </tr>
+                        {open && g.entries.map((e) => (
+                          <tr key={e.key}>
+                            <td className="col-min text-muted">#{e.itemId}</td>
+                            <td>{e.category}</td>
+                            <td><strong>{e.itemName}</strong></td>
+                            <td>{e.specification ?? '無'}</td>
+                            <td className="col-min"><span className={`badge ${typeBadge[e.type]}`}>{e.type}</span></td>
+                            <td className={`col-min text-end ${e.delta == null ? '' : e.delta >= 0 ? 'text-success' : 'text-danger'}`}>
+                              {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta}` : e.delta} {e.delta == null ? '' : e.unit ?? ''}
+                            </td>
+                            <td>{e.detail}</td>
+                            <td className="col-min text-end">{e.runningQty} {e.unit ?? ''}</td>
+                            <td className="col-min">
+                              <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
+                            </td>
+                            <td className="col-min text-nowrap">
+                              {canAdjust(e.locationId) ? (
+                                <>
+                                  <button className="btn btn-sm btn-outline-secondary me-1" title="盤點調整此批次數量" onClick={() => openAdjust(e.itemId)}>
+                                    <i className="bi bi-sliders" /> 調整
+                                  </button>
+                                  {e.type === '調整' && e.adjustmentLogId != null && (
+                                    <button className="btn btn-sm btn-outline-danger" title="刪除此調整並回算" onClick={() => void deleteAdjust(e.adjustmentLogId!)}>
+                                      <i className="bi bi-trash" />
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-muted small">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })
                 )}
               </tbody>
             </table>
           </div>
-          <div className="mt-3"><p className="text-muted mb-0">共 {filtered.length} 筆異動</p></div>
+          <div className="mt-3 d-flex justify-content-between align-items-center">
+            <p className="text-muted mb-0">共 {grouped.length} 種品項 / {filtered.length} 筆異動</p>
+            <div className="d-flex gap-2">
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setExpandedGroups(new Set(grouped.map((g) => g.key)))}>全部展開</button>
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setExpandedGroups(new Set())}>全部收合</button>
+            </div>
+          </div>
         </div>
       </div>
 
