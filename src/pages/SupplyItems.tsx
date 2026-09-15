@@ -243,7 +243,7 @@ export function SupplyItems() {
       if (categoryFilter && i.category !== categoryFilter) return false
       if (stockTypeFilter && i.stock_type !== stockTypeFilter) return false
       if (!matchesStatus(i)) return false
-      if (!withinRange(i.created_at, fromDate, toDate)) return false // #1：入庫時間區間
+      if (!withinRange(i.expiration_date, fromDate, toDate)) return false // 有效期限區間（NoExpiry 無效期者，設區間時不列入）
       if (keyword.trim()) {
         const k = keyword.trim().toLowerCase()
         const matches =
@@ -259,8 +259,9 @@ export function SupplyItems() {
   }, [items, keyword, locationFilter, categoryFilter, stockTypeFilter, statusFilter, lowStock, globalLowKeys, fromDate, toDate])
 
   const hiddenCount = useMemo(() => baseFiltered.filter(isLongZero).length, [baseFiltered])
+  // showHidden=true 時「只顯示」被隱藏(長期零庫存)的項目，方便單獨檢視；否則顯示一般項目。
   const filteredItems = useMemo(
-    () => (showHidden ? baseFiltered : baseFiltered.filter((i) => !isLongZero(i))),
+    () => (showHidden ? baseFiltered.filter((i) => isLongZero(i)) : baseFiltered.filter((i) => !isLongZero(i))),
     [baseFiltered, showHidden]
   )
 
@@ -355,8 +356,8 @@ export function SupplyItems() {
         </h2>
         <div className="d-flex gap-2">
           {/* #4：數量0超過7天的批次預設隱藏；用眼睛切換顯示/隱藏 */}
-          <button type="button" className={`btn ${showHidden ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setShowHidden((v) => !v)} title="數量0超過7天的批次">
-            <i className={`bi ${showHidden ? 'bi-eye-slash' : 'bi-eye'}`} /> {showHidden ? '隱藏零庫存過久' : `顯示已隱藏${hiddenCount > 0 ? `（${hiddenCount}）` : ''}`}
+          <button type="button" className={`btn ${showHidden ? 'btn-warning' : 'btn-outline-secondary'}`} onClick={() => setShowHidden((v) => !v)} title="數量0超過7天的批次">
+            <i className={`bi ${showHidden ? 'bi-arrow-left' : 'bi-eye'}`} /> {showHidden ? '返回一般清單' : `顯示已隱藏${hiddenCount > 0 ? `（${hiddenCount}）` : ''}`}
           </button>
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filteredItems.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
@@ -371,6 +372,12 @@ export function SupplyItems() {
 
       <FlashMessage />
       {error && <div className="alert alert-danger">{error}</div>}
+
+      {showHidden && (
+        <div className="alert alert-warning py-2">
+          <i className="bi bi-eye" /> 目前只顯示<strong>已隱藏</strong>的項目（數量 0 超過 7 天，共 {hiddenCount} 筆）。按右上「返回一般清單」回到正常檢視。
+        </div>
+      )}
 
       {/* 分類快速切換 */}
       <div className="btn-group mb-3" role="group">
@@ -447,8 +454,9 @@ export function SupplyItems() {
               </button>
             </div>
             <div className="col-12">
-              <label className="form-label">入庫日期區間</label>
+              <label className="form-label">有效期限區間</label>
               <DateRangeFilter from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+              <div className="form-text">依有效期限篩選；「無效期物資」在設定區間時不會列入。</div>
             </div>
           </div>
         </div>

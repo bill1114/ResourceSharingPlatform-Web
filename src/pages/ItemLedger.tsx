@@ -203,7 +203,8 @@ export function ItemLedger() {
     return entries.filter((e) => {
       // 幫主只看自己據點的明細（總管不限）。
       if (!isAdmin && myLocId != null && e.locationId !== myLocId) return false
-      if (!showHidden && longZeroItemIds.has(e.itemId)) return false
+      // showHidden=true 時「只顯示」被隱藏(長期零庫存)的批次；否則排除它們。
+      if (showHidden ? !longZeroItemIds.has(e.itemId) : longZeroItemIds.has(e.itemId)) return false
       if (locationFilter && e.locationId !== Number(locationFilter)) return false
       if (typeFilter && e.type !== typeFilter) return false
       if (!withinRange(e.time, fromDate, toDate)) return false
@@ -305,8 +306,8 @@ export function ItemLedger() {
         </h2>
         <div className="d-flex gap-2">
           {/* #4：數量0超過7天的批次預設隱藏；用眼睛切換 */}
-          <button type="button" className={`btn ${showHidden ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setShowHidden((v) => !v)} title="數量0超過7天的批次">
-            <i className={`bi ${showHidden ? 'bi-eye-slash' : 'bi-eye'}`} /> {showHidden ? '隱藏零庫存過久' : `顯示已隱藏${longZeroItemIds.size > 0 ? `（${longZeroItemIds.size}）` : ''}`}
+          <button type="button" className={`btn ${showHidden ? 'btn-warning' : 'btn-outline-secondary'}`} onClick={() => setShowHidden((v) => !v)} title="數量0超過7天的批次">
+            <i className={`bi ${showHidden ? 'bi-arrow-left' : 'bi-eye'}`} /> {showHidden ? '返回一般明細' : `顯示已隱藏${longZeroItemIds.size > 0 ? `（${longZeroItemIds.size}）` : ''}`}
           </button>
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
@@ -316,6 +317,11 @@ export function ItemLedger() {
       <p className="text-muted">每一筆物資從入庫到後續 領用／捐贈／報廢／轉移／調整 的完整異動歷程（總管專用）。</p>
       <FlashMessage />
       {error && <div className="alert alert-danger">{error}</div>}
+      {showHidden && (
+        <div className="alert alert-warning py-2">
+          <i className="bi bi-eye" /> 目前只顯示<strong>已隱藏</strong>的批次（數量 0 超過 7 天，共 {longZeroItemIds.size} 項）。按右上「返回一般明細」回到正常檢視。
+        </div>
+      )}
 
       <div className="card shadow-sm mb-3">
         <div className="card-header bg-light">
@@ -368,55 +374,61 @@ export function ItemLedger() {
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
                 <tr>
-                  <th className="col-min">流水號</th>
-                  <th>種類</th>
-                  <th>名稱</th>
-                  <th>規格</th>
-                  <th className="col-min">類型</th>
-                  <th className="col-min text-end">增減數量</th>
-                  <th>說明</th>
-                  <th className="col-min text-end">目前數量</th>
-                  <th className="col-min">所在據點</th>
-                  <th className="col-min">操作</th>
+                  <th style={{ width: '6%' }}>流水號</th>
+                  <th style={{ width: '9%' }}>種類</th>
+                  <th style={{ width: '12%' }}>名稱</th>
+                  <th style={{ width: '9%' }}>規格</th>
+                  <th style={{ width: '8%' }}>類型</th>
+                  <th style={{ width: '9%' }} className="text-end">增減數量</th>
+                  <th style={{ width: '18%' }}>說明</th>
+                  <th style={{ width: '8%' }} className="text-end">目前數量</th>
+                  <th style={{ width: '11%' }}>所在據點</th>
+                  <th style={{ width: '12%' }}>時間</th>
+                  <th style={{ width: '8%' }}>操作</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={10} className="text-center py-4 text-muted">載入中…</td></tr>
+                  <tr><td colSpan={11} className="text-center py-4 text-muted">載入中…</td></tr>
                 ) : grouped.length === 0 ? (
-                  <tr><td colSpan={10} className="text-center py-4 text-muted">沒有符合條件的異動</td></tr>
+                  <tr><td colSpan={11} className="text-center py-4 text-muted">沒有符合條件的異動</td></tr>
                 ) : (
                   grouped.map((g) => {
                     const open = expandedGroups.has(g.key)
                     return (
                       <Fragment key={g.key}>
-                        {/* 分組表頭：同種類/名稱/規格收合，點擊展開看操作明細 */}
-                        <tr style={{ cursor: 'pointer' }} className="table-light" onClick={() => toggleGroup(g.key)}>
+                        {/* 分組表頭：同種類/名稱/規格收合；右側「展開/收合」按鈕 */}
+                        <tr className="table-light">
                           <td colSpan={7}>
-                            <i className={`bi ${open ? 'bi-chevron-down' : 'bi-chevron-right'} me-2`} />
                             <span className="text-muted">{g.category}</span>　<strong>{g.itemName}</strong>
                             <span>{g.specification ?? '無'}</span>
                             <span className="badge bg-secondary ms-2">{g.entries.length} 筆異動</span>
                           </td>
-                          <td className="col-min text-end"><strong>{groupCurrentTotal(g.entries)}</strong></td>
-                          <td colSpan={2} className="text-muted small">{open ? '點擊收合' : '點擊展開明細'}</td>
+                          <td className="text-end"><strong>{groupCurrentTotal(g.entries)}</strong></td>
+                          <td colSpan={2} />
+                          <td>
+                            <button type="button" className="btn btn-sm btn-outline-primary text-nowrap" onClick={() => toggleGroup(g.key)}>
+                              <i className={`bi ${open ? 'bi-chevron-up' : 'bi-chevron-down'}`} /> {open ? '收合' : '展開'}
+                            </button>
+                          </td>
                         </tr>
                         {open && g.entries.map((e) => (
                           <tr key={e.key}>
-                            <td className="col-min text-muted">#{e.itemId}</td>
+                            <td className="text-muted">#{e.itemId}</td>
                             <td>{e.category}</td>
                             <td><strong>{e.itemName}</strong></td>
                             <td>{e.specification ?? '無'}</td>
-                            <td className="col-min"><span className={`badge ${typeBadge[e.type]}`}>{e.type}</span></td>
-                            <td className={`col-min text-end ${e.delta == null ? '' : e.delta >= 0 ? 'text-success' : 'text-danger'}`}>
+                            <td><span className={`badge ${typeBadge[e.type]}`}>{e.type}</span></td>
+                            <td className={`text-end ${e.delta == null ? '' : e.delta >= 0 ? 'text-success' : 'text-danger'}`}>
                               {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta}` : e.delta} {e.delta == null ? '' : e.unit ?? ''}
                             </td>
                             <td>{e.detail}</td>
-                            <td className="col-min text-end">{e.runningQty} {e.unit ?? ''}</td>
-                            <td className="col-min">
+                            <td className="text-end">{e.runningQty} {e.unit ?? ''}</td>
+                            <td>
                               <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
                             </td>
-                            <td className="col-min text-nowrap">
+                            <td className="text-nowrap small text-muted">{new Date(e.time).toLocaleString('zh-TW')}</td>
+                            <td className="text-nowrap">
                               {canAdjust(e.locationId) ? (
                                 <>
                                   <button className="btn btn-sm btn-outline-secondary me-1" title="盤點調整此批次數量" onClick={() => openAdjust(e.itemId)}>
