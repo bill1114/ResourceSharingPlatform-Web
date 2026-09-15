@@ -42,6 +42,7 @@ interface LocationSummary {
   totalQuantity: number
   lowStockCount: number
   expiringSoonCount: number
+  expiredCount: number
 }
 
 export function Dashboard() {
@@ -90,6 +91,7 @@ export function Dashboard() {
             totalQuantity: r.total_quantity,
             lowStockCount: r.low_stock_count,
             expiringSoonCount: r.expiring_soon_count,
+            expiredCount: r.expired_count,
           }))
       )
 
@@ -141,6 +143,8 @@ export function Dashboard() {
 
   // 待處理需求：總管看全部，其他單位（幫主）只看自己據點提出的。
   const visibleRequests = isAdmin ? requests : requests.filter((r) => r.requesting_location_id === myLoc)
+  // 非總管的「已過期」卡片只計自己據點（清單也只顯示自己據點）。
+  const mySummary = locationSummaries.find((s) => s.locationId === myLoc)
 
   return (
     <div className="container-fluid mt-4">
@@ -174,7 +178,8 @@ export function Dashboard() {
               locationLowStock: lowStockItemCount,
               globalLowStock: globalLowStockCount,
               expiringSoon: expiringSoonCount,
-              expired: expiredCount,
+              // 已過期：總管全域；幫主/小幫手只計自己據點。
+              expired: isAdmin ? expiredCount : (mySummary?.expiredCount ?? 0),
             }
             return (
               <div className="col-md-3" key={key}>

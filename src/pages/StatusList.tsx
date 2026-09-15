@@ -109,10 +109,17 @@ export function StatusList() {
         note: `募資觸發點 ${Math.max(0, g.global_threshold - g.global_safety_stock)} ${g.unit}（門檻 ${g.global_threshold} − 安全 ${g.global_safety_stock}，請啟動募資）`,
       }))
     }
+    // 已過期：幫主/小幫手只看自己據點的（總管不限）。
+    const expiredOwnOnly = profile?.role_name !== Roles.Admin
+    const myLoc = profile?.location_id ?? null
     const picked = items.filter((it) => {
       if (status === 'locationLowStock') return isItemLowStock(it, lowStock)
       if (status === 'expiringSoon') return it.expiration_date != null && it.expiration_date >= today && it.expiration_date <= in30
-      if (status === 'expired') return it.expiration_date != null && it.expiration_date < today
+      if (status === 'expired') {
+        if (it.expiration_date == null || it.expiration_date >= today) return false
+        if (expiredOwnOnly && it.location_id !== myLoc) return false
+        return true
+      }
       return false
     })
     return picked.map((it) => ({
@@ -129,7 +136,7 @@ export function StatusList() {
       expiration: it.expiration_date,
       note: null,
     }))
-  }, [status, items, globalLow, lowStock, today, in30])
+  }, [status, items, globalLow, lowStock, today, in30, profile])
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase()
