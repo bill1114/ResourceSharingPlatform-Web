@@ -11,6 +11,7 @@ const emptyForm: Form = { username: '', displayName: '', password: '', roleName:
 export function AccountManagement() {
   const [profiles, setProfiles] = useState<Profile[]>([]), [locations, setLocations] = useState<SupplyLocation[]>([])
   const [bindings, setBindings] = useState<LineBinding[]>([])
+  const [resetReqs, setResetReqs] = useState<{ id: number; username: string; note: string | null; requested_at: string }[]>([])
   const [form, setForm] = useState<Form>(emptyForm), [keyword, setKeyword] = useState(''), [roleFilter, setRoleFilter] = useState<Role|''>(''), [locationFilter, setLocationFilter] = useState(''), [statusFilter, setStatusFilter] = useState<''|'active'|'inactive'>(''), [message, setMessage] = useState<{ok:boolean;text:string}|null>(null), [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
   // 綁定碼只有 30 秒，不倒數的話管理員根本不知道還剩多久。issuedAt 記下來是為了
@@ -21,7 +22,13 @@ export function AccountManagement() {
   const bindExpiresMs = bindCode ? new Date(bindCode.expiresAt).getTime() : 0
   const bindSecondsLeft = bindCode ? Math.max(0, Math.ceil((bindExpiresMs - nowMs) / 1000)) : 0
   const bindPercent = bindCode ? Math.max(0, Math.min(100, ((bindExpiresMs - nowMs) / (bindExpiresMs - bindCode.issuedAt)) * 100)) : 0
-  async function load() { const [p, l, b] = await Promise.all([supabase.from('profiles').select('*').order('username'), supabase.from('supply_location').select('*').eq('is_active', true).order('id'), supabase.functions.invoke('account-admin',{body:{action:'bindings'}})]); setProfiles((p.data ?? []) as Profile[]); setLocations((l.data ?? []) as SupplyLocation[]); setBindings((b.data?.bindings ?? []) as LineBinding[]) }
+  async function load() { const [p, l, b, r] = await Promise.all([supabase.from('profiles').select('*').order('username'), supabase.from('supply_location').select('*').eq('is_active', true).order('id'), supabase.functions.invoke('account-admin',{body:{action:'bindings'}}), supabase.from('password_reset_request').select('id, username, note, requested_at').eq('status','Open').order('requested_at',{ascending:false})]); setProfiles((p.data ?? []) as Profile[]); setLocations((l.data ?? []) as SupplyLocation[]); setBindings((b.data?.bindings ?? []) as LineBinding[]); setResetReqs((r.data ?? []) as typeof resetReqs) }
+  async function markReset(id: number, status: 'Handled' | 'Rejected') {
+    await supabase.from('password_reset_request').update({ status, handled_at: new Date().toISOString() }).eq('id', id)
+    void logActivity({ action: 'password_reset_' + (status === 'Handled' ? 'handled' : 'rejected'), category: '資料維護', targetTable: 'password_reset_request', targetId: id, summary: `忘記密碼申請 #${id} 標記為${status === 'Handled' ? '已處理' : '駁回'}` })
+    await load()
+  }
+  function resetPasswordFor(username: string) { const p = profiles.find((x) => x.username === username); if (p) edit(p); else setMessage({ ok: false, text: `找不到帳號「${username}」，可能拼錯或已停用。` }) }
   useEffect(() => { void load() }, [])
   const filtered = useMemo(() => profiles.filter((x) =>
     (!roleFilter || x.role_name === roleFilter) &&
@@ -40,6 +47,26 @@ export function AccountManagement() {
     setBindCode(null);setMessage({ok:!!data?.success,text:data?.message??error?.message??'LINE 綁定操作失敗'});if(data?.success)await load()}
   return <div className="container-fluid mt-4"><div className="d-flex justify-content-between align-items-center"><h2><i className="bi bi-people" /> 帳號管理</h2><button className="btn btn-primary" onClick={openCreate}><i className="bi bi-person-plus" /> 新增帳號</button></div><hr />
     {message && <div className={`alert alert-${message.ok?'success':'danger'}`}>{message.text}</div>}
+    {resetReqs.length > 0 && (
+      <div className="card border-warning mb-3">
+        <div className="card-header bg-warning-subtle text-dark"><i className="bi bi-exclamation-triangle" /> 忘記密碼申請（{resetReqs.length}）— 請確認身分後為其重設密碼</div>
+        <div className="table-responsive"><table className="table table-sm mb-0 align-middle">
+          <thead className="table-light"><tr><th>帳號</th><th>說明</th><th>提出時間</th><th className="text-end">處理</th></tr></thead>
+          <tbody>{resetReqs.map((r) => (
+            <tr key={r.id}>
+              <td><strong>{r.username}</strong></td>
+              <td className="text-muted">{r.note ?? '—'}</td>
+              <td className="col-min">{new Date(r.requested_at).toLocaleString('zh-TW')}</td>
+              <td className="text-end text-nowrap">
+                <button className="btn btn-sm btn-primary me-1" onClick={() => resetPasswordFor(r.username)}><i className="bi bi-key" /> 重設密碼</button>
+                <button className="btn btn-sm btn-outline-success me-1" onClick={() => void markReset(r.id, 'Handled')}>標記已處理</button>
+                <button className="btn btn-sm btn-outline-secondary" onClick={() => void markReset(r.id, 'Rejected')}>駁回</button>
+              </td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      </div>
+    )}
     {bindCode && <div className={`alert ${bindSecondsLeft>0?'alert-warning':'alert-secondary'} d-flex align-items-center gap-3 flex-wrap`}>
       <div className="text-center">
         <div className="small text-muted">LINE 綁定碼{bindCode.username && `（${bindCode.username}）`}</div>
