@@ -154,11 +154,24 @@ export function ItemLedger() {
     }
     for (const t of (trfRes.data ?? []) as Record<string, unknown>[]) {
       const it = itemById.get(t.supply_item_id as number); if (!it) continue
-      list.push({ ...base(it), key: `trf-${it.id}-${t.transfer_time}`, time: t.transfer_time as string, type: '轉移', delta: null, detail: `${locName(t.from_location_id as number)} → ${locName(t.to_location_id as number)}（${t.transfer_quantity} ${it.unit ?? ''}，${t.status}）`, operator: (t.operator as string) ?? null })
+      // 轉移是對「來源批次」扣量（建立轉移即扣，取消才退回）。非取消＝-數量，取消＝0。
+      const cancelled = (t.status as string) === 'Cancelled'
+      list.push({ ...base(it), key: `trf-${it.id}-${t.transfer_time}`, time: t.transfer_time as string, type: '轉移', delta: cancelled ? 0 : -(t.transfer_quantity as number), detail: `${locName(t.from_location_id as number)} → ${locName(t.to_location_id as number)}（${t.transfer_quantity} ${it.unit ?? ''}，${t.status}）`, operator: (t.operator as string) ?? null })
     }
     for (const a of (adjRes.data ?? []) as Record<string, unknown>[]) {
       const it = itemById.get(a.supply_item_id as number); if (!it) continue
       list.push({ ...base(it), key: `adj-${a.id}`, time: a.adjusted_at as string, type: '調整', delta: a.delta as number, detail: `盤點修正 ${a.quantity_before}→${a.quantity_after}${a.reason ? `（${a.reason}）` : ''}`, operator: (a.operator as string) ?? null, adjustmentLogId: a.id as number })
+    }
+
+    // 修正「建立批次」(無入庫來源紀錄) 的期初數量：期初＝目前數量 − 其他所有增減，
+    // 讓累加後正好回到目前數量，避免用「目前數量」當入庫量而算出負數。
+    const otherSum = new Map<number, number>()
+    for (const e of list) {
+      if (e.key.startsWith('in0-')) continue
+      otherSum.set(e.itemId, (otherSum.get(e.itemId) ?? 0) + (e.delta ?? 0))
+    }
+    for (const e of list) {
+      if (e.key.startsWith('in0-')) e.delta = e.currentQty - (otherSum.get(e.itemId) ?? 0)
     }
 
     // 依「批次(id) 由大到小，同批次內時間由早到晚」排序，讓每筆物資的異動聚在一起、第一筆是入庫。
@@ -319,7 +332,7 @@ export function ItemLedger() {
       {error && <div className="alert alert-danger">{error}</div>}
       {showHidden && (
         <div className="alert alert-warning py-2">
-          <i className="bi bi-eye" /> 目前只顯示<strong>已隱藏</strong>的批次（數量 0 超過 7 天，共 {longZeroItemIds.size} 項）。按右上「返回一般明細」回到正常檢視。
+          <i className="bi bi-eye" /> 目前只顯示<strong>已隱藏</strong>的項目（數量 0 超過 7 天，共 {grouped.length} 種品項、{longZeroItemIds.size} 個批次）。同名同規格的多個批次會合併成一列，故種品項數可能少於批次數。按右上「返回一般明細」回到正常檢視。
         </div>
       )}
 
