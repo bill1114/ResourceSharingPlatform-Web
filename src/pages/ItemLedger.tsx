@@ -211,6 +211,13 @@ export function ItemLedger() {
     return ids
   }, [entries])
 
+  // 已隱藏以「品項（種類/名稱/規格）」計數，不用批次數。
+  const hiddenItemCount = useMemo(() => {
+    const keys = new Set<string>()
+    for (const e of entries) if (longZeroItemIds.has(e.itemId)) keys.add(`${e.category}|${e.itemName}|${e.specification ?? ''}`)
+    return keys.size
+  }, [entries, longZeroItemIds])
+
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase()
     return entries.filter((e) => {
@@ -320,7 +327,7 @@ export function ItemLedger() {
         <div className="d-flex gap-2">
           {/* #4：數量0超過7天的批次預設隱藏；用眼睛切換 */}
           <button type="button" className={`btn ${showHidden ? 'btn-warning' : 'btn-outline-secondary'}`} onClick={() => setShowHidden((v) => !v)} title="數量0超過7天的批次">
-            <i className={`bi ${showHidden ? 'bi-arrow-left' : 'bi-eye'}`} /> {showHidden ? '返回一般明細' : `顯示已隱藏${longZeroItemIds.size > 0 ? `（${longZeroItemIds.size}）` : ''}`}
+            <i className={`bi ${showHidden ? 'bi-arrow-left' : 'bi-eye'}`} /> {showHidden ? '返回一般明細' : `顯示已隱藏${hiddenItemCount > 0 ? `（${hiddenItemCount}）` : ''}`}
           </button>
           <button className="btn btn-outline-success" onClick={handleExport} disabled={filtered.length === 0}>
             <i className="bi bi-file-earmark-excel" /> 匯出 Excel
@@ -332,7 +339,7 @@ export function ItemLedger() {
       {error && <div className="alert alert-danger">{error}</div>}
       {showHidden && (
         <div className="alert alert-warning py-2">
-          <i className="bi bi-eye" /> 目前只顯示<strong>已隱藏</strong>的項目（數量 0 超過 7 天，共 {grouped.length} 種品項、{longZeroItemIds.size} 個批次）。同名同規格的多個批次會合併成一列，故種品項數可能少於批次數。按右上「返回一般明細」回到正常檢視。
+          <i className="bi bi-eye" /> 目前只顯示<strong>已隱藏</strong>的項目（數量 0 超過 7 天，共 {hiddenItemCount} 種品項）。按右上「返回一般明細」回到正常檢視。
         </div>
       )}
 
