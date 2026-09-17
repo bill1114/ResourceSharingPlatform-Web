@@ -5,6 +5,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { Roles, roleDisplayName } from '../lib/enums'
 import { useEngineeringMode } from '../hooks/useEngineeringMode'
+import { APP_VERSION } from '../lib/version'
 
 export function AppShell() {
   const { profile, signOut } = useAuth()
@@ -230,7 +231,7 @@ export function AppShell() {
       <footer className="border-top footer text-muted mt-5 py-3 bg-light">
         <div className="container">
           <div className="row">
-            <div className="col-md-6">&copy; 2026 - 愛心轉運站</div>
+            <div className="col-md-6">&copy; 2026 - 愛心轉運站　<span className="badge bg-secondary">{APP_VERSION}</span></div>
             <div className="col-md-6 text-end">
               <i className="bi bi-info-circle" /> 用於管理地方據點物資現況、庫存數量、有效期限與轉移紀錄
             </div>

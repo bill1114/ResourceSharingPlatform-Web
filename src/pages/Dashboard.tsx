@@ -149,7 +149,7 @@ export function Dashboard() {
   return (
     <div className="container-fluid mt-4">
       <h2 className="mb-4">
-        <i className="bi bi-speedometer2" /> 物資總攬
+        <i className="bi bi-speedometer2" /> 物資總覽
       </h2>
       <FlashMessage />
 
