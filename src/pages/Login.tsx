@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabaseClient'
+import { APP_VERSION } from '../lib/version'
 
 export function Login() {
   const { session, signIn } = useAuth()
@@ -57,9 +58,10 @@ export function Login() {
     <div className="container d-flex justify-content-center align-items-center" style={{ minHeight: '80vh' }}>
       <div className="card shadow-sm" style={{ width: '100%', maxWidth: 400 }}>
         <div className="card-body p-4">
-          <h2 className="text-center mb-4">
+          <h2 className="text-center mb-1">
             <i className="bi bi-box-seam" /> 愛心轉運站
           </h2>
+          <div className="text-center mb-4"><span className="badge bg-secondary">{APP_VERSION}</span></div>
           {error && (
             <div className="alert alert-danger py-2" role="alert">
               {error}
