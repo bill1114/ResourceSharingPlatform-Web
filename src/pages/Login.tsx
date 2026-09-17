@@ -56,12 +56,12 @@ export function Login() {
 
   return (
     <div className="container d-flex justify-content-center align-items-center" style={{ minHeight: '80vh' }}>
+      <span className="badge bg-secondary" style={{ position: 'fixed', right: 12, bottom: 12, zIndex: 10 }}>{APP_VERSION}</span>
       <div className="card shadow-sm" style={{ width: '100%', maxWidth: 400 }}>
         <div className="card-body p-4">
-          <h2 className="text-center mb-1">
+          <h2 className="text-center mb-4">
             <i className="bi bi-box-seam" /> 愛心轉運站
           </h2>
-          <div className="text-center mb-4"><span className="badge bg-secondary">{APP_VERSION}</span></div>
           {error && (
             <div className="alert alert-danger py-2" role="alert">
               {error}
