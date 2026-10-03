@@ -50,6 +50,7 @@ interface FlowRecipient {
   district: string | null
   quantity: number
   count: number
+  items: { name: string; quantity: number }[] // 這位使用人領走的品項明細（批次層級近似）
 }
 
 interface DonorGroup {
@@ -153,21 +154,32 @@ export function DonorAnalysis() {
       g.itemIds = [...itemIdSet]
       g.onHandQuantity = g.itemIds.reduce((s, id) => s + (itemOf(id)?.quantity ?? 0), 0)
 
-      // 物流追蹤：這些批次的出庫紀錄，依使用人彙總。
-      const recipMap = new Map<string, FlowRecipient>()
+      // 物流追蹤：這些批次的出庫紀錄，依使用人彙總（並記錄各自領走的品項）。
+      const recipMap = new Map<string, FlowRecipient & { itemMap: Map<string, number> }>()
       for (const o of outbounds) {
         if (!itemIdSet.has(o.supply_item_id)) continue
         g.issuedQuantity += o.outbound_quantity
         const rk = `${o.recipient_name}||${o.recipient_contact ?? ''}`
         let r = recipMap.get(rk)
         if (!r) {
-          r = { name: o.recipient_name, identity: o.recipient_identity, district: o.recipient_district, quantity: 0, count: 0 }
+          r = { name: o.recipient_name, identity: o.recipient_identity, district: o.recipient_district, quantity: 0, count: 0, items: [], itemMap: new Map() }
           recipMap.set(rk, r)
         }
         r.quantity += o.outbound_quantity
         r.count += 1
+        const iname = itemNameOf(o.supply_item_id)
+        r.itemMap.set(iname, (r.itemMap.get(iname) ?? 0) + o.outbound_quantity)
       }
-      g.flow = [...recipMap.values()].sort((a, b) => b.quantity - a.quantity)
+      g.flow = [...recipMap.values()]
+        .map((r) => ({
+          name: r.name,
+          identity: r.identity,
+          district: r.district,
+          quantity: r.quantity,
+          count: r.count,
+          items: [...r.itemMap.entries()].map(([name, quantity]) => ({ name, quantity })).sort((a, b) => b.quantity - a.quantity),
+        }))
+        .sort((a, b) => b.quantity - a.quantity)
       g.donations.sort((a, b) => (a.time < b.time ? 1 : -1))
       // 代表性資料：入庫來源紀錄中最近一筆有填的（捐贈頁本身沒有這些欄位）。
       g.address = g.donations.find((d) => d.donorAddress.trim())?.donorAddress.trim() ?? ''
@@ -421,13 +433,22 @@ export function DonorAnalysis() {
                                   <div className="text-muted small py-2">這些批次目前還沒有發放紀錄（可能仍在庫或已轉移）。</div>
                                 ) : (
                                   <table className="table table-sm bg-white mb-0">
-                                    <thead><tr><th>使用人</th><th className="col-min">身分別</th><th>鄉鎮</th><th className="col-min">領取件數</th></tr></thead>
+                                    <thead><tr><th>使用人</th><th className="col-min">身分別</th><th>鄉鎮</th><th>領取品項</th><th className="col-min">領取件數</th></tr></thead>
                                     <tbody>
                                       {g.flow.map((r, idx) => (
                                         <tr key={idx}>
                                           <td><strong>{r.name || '（未填）'}</strong></td>
                                           <td className="col-min">{r.identity ? recipientIdentityDisplayName(r.identity) : '—'}</td>
                                           <td>{r.district || '—'}</td>
+                                          <td>
+                                            <div className="d-flex flex-wrap gap-1">
+                                              {r.items.map((it) => (
+                                                <span className="badge bg-light text-dark border" key={it.name}>
+                                                  {it.name} <strong>{it.quantity}</strong>
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </td>
                                           <td className="col-min"><strong>{r.quantity}</strong></td>
                                         </tr>
                                       ))}

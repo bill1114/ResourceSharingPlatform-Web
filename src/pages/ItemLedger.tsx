@@ -400,7 +400,7 @@ export function ItemLedger() {
                   <th style={{ width: '9%' }}>規格</th>
                   <th style={{ width: '8%' }}>類型</th>
                   <th style={{ width: '9%' }} className="text-end">增減數量</th>
-                  <th style={{ width: '18%' }}>說明</th>
+                  <th style={{ width: '18%' }} className="text-center">說明</th>
                   <th style={{ width: '8%' }} className="text-end">目前數量</th>
                   <th style={{ width: '11%' }}>所在據點</th>
                   <th style={{ width: '12%' }}>時間</th>
@@ -421,8 +421,7 @@ export function ItemLedger() {
                         <tr className="table-light">
                           <td colSpan={7}>
                             <span className="text-muted">{g.category}</span>　<strong>{g.itemName}</strong>
-                            <span>{g.specification ?? '無'}</span>
-                            <span className="badge bg-secondary ms-2">{g.entries.length} 筆異動</span>
+                            <span className="ms-2">{g.specification ?? '無'}</span>
                           </td>
                           <td className="text-end"><strong>{groupCurrentTotal(g.entries)}</strong></td>
                           <td colSpan={2} />
@@ -442,7 +441,7 @@ export function ItemLedger() {
                             <td className={`text-end ${e.delta == null ? '' : e.delta >= 0 ? 'text-success' : 'text-danger'}`}>
                               {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta}` : e.delta} {e.delta == null ? '' : e.unit ?? ''}
                             </td>
-                            <td>{e.detail}</td>
+                            <td className="text-center">{e.detail}</td>
                             <td className="text-end">{e.runningQty} {e.unit ?? ''}</td>
                             <td>
                               <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
