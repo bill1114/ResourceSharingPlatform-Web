@@ -5,11 +5,11 @@
 // 資料來源：
 //   捐贈人的貢獻同時來自「物資捐贈」(supply_donation_log) 與「物資入庫」
 //   (supply_stock_in_log 有填捐贈人者)，兩者都以 supply_item_id 連到批次。
-//   流向則靠同一個 supply_item_id 對應到 supply_outbound_log 的領用人。
+//   流向則靠同一個 supply_item_id 對應到 supply_outbound_log 的使用人。
 //
 // ⚠️ 重要限制（批次層級追蹤）：
 //   一個批次可能混入多位捐贈人的捐贈，出庫時採先進先出、不會標記「發給誰的是誰捐的」。
-//   因此「流向」是批次層級的近似：呈現「這位捐贈人貢獻過的批次，後續發放給哪些領用人」，
+//   因此「流向」是批次層級的近似：呈現「這位捐贈人貢獻過的批次，後續發放給哪些使用人」，
 //   而非精確的一對一歸屬。畫面與匯出都以此語意呈現。
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
@@ -153,7 +153,7 @@ export function DonorAnalysis() {
       g.itemIds = [...itemIdSet]
       g.onHandQuantity = g.itemIds.reduce((s, id) => s + (itemOf(id)?.quantity ?? 0), 0)
 
-      // 物流追蹤：這些批次的出庫紀錄，依領用人彙總。
+      // 物流追蹤：這些批次的出庫紀錄，依使用人彙總。
       const recipMap = new Map<string, FlowRecipient>()
       for (const o of outbounds) {
         if (!itemIdSet.has(o.supply_item_id)) continue
@@ -214,7 +214,7 @@ export function DonorAnalysis() {
       { header: '不同物資', value: (g) => new Set(g.donations.map((d) => d.supplyItemId)).size },
       { header: '批次已發放件數', value: (g) => g.issuedQuantity },
       { header: '批次目前在庫', value: (g) => g.onHandQuantity },
-      { header: '主要流向（領用人 件數）', value: (g) => g.flow.slice(0, 10).map((r) => `${r.name} ${r.quantity}`).join('、') },
+      { header: '主要流向（使用人 件數）', value: (g) => g.flow.slice(0, 10).map((r) => `${r.name} ${r.quantity}`).join('、') },
     ], groups)
   }
 
@@ -230,7 +230,7 @@ export function DonorAnalysis() {
       </div>
 
       <div className="alert alert-light border small">
-        <i className="bi bi-info-circle" /> 「物流追蹤」為<strong>批次層級</strong>的近似：呈現這位捐贈人貢獻過的批次後續發放給哪些領用人。
+        <i className="bi bi-info-circle" /> 「物流追蹤」為<strong>批次層級</strong>的近似：呈現這位捐贈人貢獻過的批次後續發放給哪些使用人。
         由於一個批次可能混入多位捐贈人、領用採先進先出，並非精確的一對一歸屬。
       </div>
 
@@ -379,7 +379,7 @@ export function DonorAnalysis() {
                                   <div className="text-muted small py-2">這些批次目前還沒有發放紀錄（可能仍在庫或已轉移）。</div>
                                 ) : (
                                   <table className="table table-sm bg-white mb-0">
-                                    <thead><tr><th>領用人</th><th className="col-min">身分別</th><th>鄉鎮</th><th className="col-min">領取件數</th></tr></thead>
+                                    <thead><tr><th>使用人</th><th className="col-min">身分別</th><th>鄉鎮</th><th className="col-min">領取件數</th></tr></thead>
                                     <tbody>
                                       {g.flow.map((r, idx) => (
                                         <tr key={idx}>

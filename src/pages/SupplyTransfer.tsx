@@ -46,7 +46,7 @@ export function SupplyTransferCreate() {
     })
   }, [])
 
-  // 物資清單「物資轉移」按鈕帶 ?supplyItemId= 進來時，預選來源據點與該筆物資。
+  // 物資清單「物資轉移」按鈕帶 ?supplyItemId= 進來時，預選轉出據點與該筆物資。
   useEffect(() => {
     const id = searchParams.get('supplyItemId')
     if (!id || items.length === 0) return
@@ -56,8 +56,8 @@ export function SupplyTransferCreate() {
     setLines([{ item: target, quantity: 1 }])
   }, [searchParams, items])
 
-  // 戰情總覽「待處理需求」的「轉移補貨」帶 ?requestId= 進來時：來源=需求指定的來源據點、
-  // 目標=需求據點，並在來源據點找符合品項的批次、帶入需求數量。
+  // 物資總覽「待處理需求」的「轉移補貨」帶 ?requestId= 進來時：來源=需求指定的轉出據點、
+  // 目標=需求據點，並在轉出據點找符合品項的批次、帶入需求數量。
   useEffect(() => {
     const reqId = searchParams.get('requestId')
     if (!reqId || items.length === 0) return
@@ -124,7 +124,7 @@ export function SupplyTransferCreate() {
     setError(null)
     setSuccess(null)
     if (!fromLocationId || !toLocationId || fromLocationId === toLocationId) {
-      setError('請選擇不同的來源與目標據點')
+      setError('請選擇不同的轉出與入庫據點')
       return
     }
     if (lines.length === 0) {
@@ -172,24 +172,24 @@ export function SupplyTransferCreate() {
       <div className="row">
         <div className="col-lg-8">
           <form onSubmit={submit}>
-            {/* 步驟一：來源與目標據點 */}
+            {/* 步驟一：轉出與入庫據點 */}
             <div className="card shadow-sm mb-4">
-              <div className="card-header bg-light"><i className="bi bi-geo" /> 步驟一：來源與目標據點</div>
+              <div className="card-header bg-light"><i className="bi bi-geo" /> 步驟一：轉出與入庫據點</div>
               <div className="card-body">
                 <div className="row">
                   <div className="col-md-6 mb-3">
-                    <label className="form-label">來源據點 *</label>
+                    <label className="form-label">轉出據點 *</label>
                     {isAdmin ? (
                       <select className="form-select" required value={fromLocationId ?? ''} onChange={(e) => { setFromLocationId(e.target.value ? Number(e.target.value) : null); setLines([]) }}>
-                        <option value="">請選擇來源據點</option>{locations.map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
+                        <option value="">請選擇轉出據點</option>{locations.map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
                       </select>
                     ) : <input className="form-control" disabled value={locations.find((x) => x.id === fromLocationId)?.location_name ?? ''} />}
                     {!isAdmin && <div className="form-text">已鎖定為你的所屬據點；只有最高權限管理人員能切換。</div>}
                   </div>
                   <div className="col-md-6 mb-3">
-                    <label className="form-label">目標據點 *</label>
+                    <label className="form-label">入庫據點 *</label>
                     <select className="form-select" required value={toLocationId ?? ''} onChange={(e) => setToLocationId(e.target.value ? Number(e.target.value) : null)}>
-                      <option value="">請選擇目標據點</option>{locations.filter((x) => x.id !== fromLocationId).map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
+                      <option value="">請選擇入庫據點</option>{locations.filter((x) => x.id !== fromLocationId).map((x) => <option key={x.id} value={x.id}>{x.location_name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -218,7 +218,7 @@ export function SupplyTransferCreate() {
                   </thead>
                   <tbody>
                     {lines.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center text-muted py-4">{fromLocationId ? '尚未加入任何物資，請按右上角「新增物資」' : '請先選擇來源據點'}</td></tr>
+                      <tr><td colSpan={6} className="text-center text-muted py-4">{fromLocationId ? '尚未加入任何物資，請按右上角「新增物資」' : '請先選擇轉出據點'}</td></tr>
                     ) : lines.map((l) => {
                       const alert = expiryAlert(l.item)
                       const over = l.quantity > l.item.quantity
@@ -268,8 +268,8 @@ export function SupplyTransferCreate() {
           <div className="alert alert-info">
             <strong><i className="bi bi-info-circle" /> 轉移說明</strong>
             <ul className="mb-0 mt-2">
-              <li>先選來源與目標據點，再一項一項加入要轉移的批次</li>
-              <li>物資清單只會顯示來源據點的庫存；只有最高權限管理人員能切換來源</li>
+              <li>先選轉出與入庫據點，再一項一項加入要轉移的批次</li>
+              <li>物資清單只會顯示轉出據點的庫存；只有最高權限管理人員能切換來源</li>
               <li>同一個批次重複加入會自動累加數量</li>
             </ul>
           </div>
@@ -277,7 +277,7 @@ export function SupplyTransferCreate() {
             <strong><i className="bi bi-exclamation-triangle" /> 到貨確認</strong>
             <ul className="mb-0 mt-2">
               <li>建立時先扣除來源庫存</li>
-              <li>目標據點確認後才會入庫</li>
+              <li>入庫據點確認後才會入庫</li>
               <li>取消會退回來源庫存</li>
             </ul>
           </div>
@@ -307,8 +307,8 @@ export function SupplyTransferCreate() {
           onCancel={() => setConfirmOpen(false)}
           onConfirm={() => void doTransfer()}
           fields={[
-            { label: '來源據點', value: locationName(fromLocationId) },
-            { label: '目標據點', value: locationName(toLocationId) },
+            { label: '轉出據點', value: locationName(fromLocationId) },
+            { label: '入庫據點', value: locationName(toLocationId) },
             ...(remark.trim() ? [{ label: '備註', value: remark.trim(), full: true }] : []),
           ]}
           items={lines.map((l) => ({
@@ -322,7 +322,7 @@ export function SupplyTransferCreate() {
           }))}
           extraHeader="轉移數量"
           extraColHeader="轉移後來源剩餘"
-          warning={<>按下「確定轉移」後會<strong>立刻扣除來源據點庫存</strong>，待目標據點確認到貨後才入庫。請再確認一次品項與數量。</>}
+          warning={<>按下「確定轉移」後會<strong>立刻扣除轉出據點庫存</strong>，待入庫據點確認到貨後才入庫。請再確認一次品項與數量。</>}
         />
       )}
     </div>
@@ -386,16 +386,16 @@ export function SupplyTransferIndex() {
 
   function handleExport() {
     exportToExcel<SupplyTransferLog>('物資轉移紀錄', '轉移紀錄', [
-      { header: '轉移時間', value: (l) => new Date(l.transfer_time).toLocaleString('zh-TW') },
+      { header: '轉移時間', value: (l) => new Date(l.transfer_time).toLocaleDateString('zh-TW') },
       { header: '物資', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `#${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
-      { header: '來源據點', value: (l) => locationName(l.from_location_id) },
-      { header: '目標據點', value: (l) => locationName(l.to_location_id) },
+      { header: '轉出據點', value: (l) => locationName(l.from_location_id) },
+      { header: '入庫據點', value: (l) => locationName(l.to_location_id) },
       { header: '數量', value: (l) => l.transfer_quantity, total: true },
       { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
       { header: '狀態', value: (l) => transferStatusDisplayName(l.status) },
       { header: '確認人', value: (l) => l.confirmed_by ?? '' },
-      { header: '確認時間', value: (l) => (l.confirmed_at ? new Date(l.confirmed_at).toLocaleString('zh-TW') : '') },
+      { header: '確認時間', value: (l) => (l.confirmed_at ? new Date(l.confirmed_at).toLocaleDateString('zh-TW') : '') },
       { header: '操作人員', value: (l) => l.operator ?? '' },
       { header: '備註', value: (l) => l.remark ?? '' },
     ], filtered)
@@ -427,9 +427,9 @@ export function SupplyTransferIndex() {
         const canConfirm = isAdmin || profile?.location_id === log.to_location_id
         const canCancel = isAdmin || profile?.location_id === log.from_location_id
         return <tr key={log.id}>
-          <td>{new Date(log.transfer_time).toLocaleString('zh-TW')}</td><td><strong>{item?.item_name ?? `物資 #${log.supply_item_id}`}</strong>{item?.specification && <div className="small text-muted">{item.specification}</div>}</td>
+          <td>{new Date(log.transfer_time).toLocaleDateString('zh-TW')}</td><td><strong>{item?.item_name ?? `物資 #${log.supply_item_id}`}</strong>{item?.specification && <div className="small text-muted">{item.specification}</div>}</td>
           <td><span className="badge" style={locationColorStyle(log.from_location_id)}>{locationName(log.from_location_id)}</span></td><td><i className="bi bi-arrow-right-circle text-primary" /></td><td><span className="badge" style={locationColorStyle(log.to_location_id)}>{locationName(log.to_location_id)}</span></td>
-          <td><strong>{log.transfer_quantity}</strong> {item?.unit}</td><td><span className={`badge ${transferStatusBadgeClass(log.status)}`}>{transferStatusDisplayName(log.status)}</span>{log.confirmed_by && <div className="small text-muted">{log.confirmed_by}<br />{log.confirmed_at && new Date(log.confirmed_at).toLocaleString('zh-TW')}</div>}</td>
+          <td><strong>{log.transfer_quantity}</strong> {item?.unit}</td><td><span className={`badge ${transferStatusBadgeClass(log.status)}`}>{transferStatusDisplayName(log.status)}</span>{log.confirmed_by && <div className="small text-muted">{log.confirmed_by}<br />{log.confirmed_at && new Date(log.confirmed_at).toLocaleDateString('zh-TW')}</div>}</td>
           <td>{log.operator}</td><td>{log.remark}</td><td>{log.status === TransferStatuses.Pending && <div className="d-flex gap-1">
             {canConfirm && <button className="btn btn-success btn-sm" onClick={() => void resolve('transfer-confirm', log.id)}>確認送達</button>}
             {canCancel && <button className="btn btn-outline-danger btn-sm" onClick={() => void resolve('transfer-cancel', log.id)}>取消</button>}

@@ -6,7 +6,7 @@
 //   明細維度（次軸）= 每一列展開後看到的分佈，預設「物資品項」。
 //
 // 於是同一頁可以回答不同問題，差別只在第一個條件選什麼：
-//   第一條件＝使用人   → 一列一位領用人，明細是「他領了哪些物資」
+//   第一條件＝使用人   → 一列一位使用人，明細是「他領了哪些物資」
 //   第一條件＝鄉鎮別   → 一列一個鄉鎮，明細是「該鄉鎮領走哪些物資」
 //   第一條件＝物資品項 → 一列一項物資，明細預設改看「哪些鄉鎮領走」
 //
@@ -243,7 +243,7 @@ export function RecipientAnalysis() {
         { header: FilterFieldLabels[primaryField], value: (g) => g.label },
         { header: '領取次數', value: (g) => g.pickupCount },
         { header: '領取件數', value: (g) => g.quantity },
-        { header: '領用人數', value: (g) => g.recipientCount },
+        { header: '使用人數', value: (g) => g.recipientCount },
         { header: `${FilterFieldLabels[detailField]}分佈`, value: (g) => g.details.map((d) => `${d.label} ${d.quantity}`).join('、') },
       ],
       groups
@@ -313,7 +313,7 @@ export function RecipientAnalysis() {
                 目前沒有篩選條件，預設以<strong>物資品項</strong>為分析角度。
                 <br />
                 <strong>加入的第一個篩選條件會成為分析角度</strong>；例如第一個選「使用人」，
-                下表就會變成一列一位領用人、明細是他領了哪些物資。
+                下表就會變成一列一位使用人、明細是他領了哪些物資。
               </>
             ) : (
               <>
@@ -399,7 +399,7 @@ export function RecipientAnalysis() {
       <div className="row g-3 mb-4">
         {[
           { label: `${FilterFieldLabels[primaryField]}項目數`, value: groups.length },
-          { label: '領用人數', value: distinctRecipients },
+          { label: '使用人數', value: distinctRecipients },
           { label: '領取總次數', value: totalPickups },
           { label: '領取總件數', value: totalQuantity },
           { label: '涉及物資批次', value: distinctItems },
@@ -429,7 +429,7 @@ export function RecipientAnalysis() {
                 <th>{FilterFieldLabels[primaryField]}</th>
                 <th className="col-min">領取次數</th>
                 <th className="col-min">領取件數</th>
-                <th className="col-min">領用人數</th>
+                <th className="col-min">使用人數</th>
                 <th>
                   {FilterFieldLabels[detailField]}分佈（依件數排序）
                 </th>

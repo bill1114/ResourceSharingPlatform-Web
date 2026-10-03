@@ -1,4 +1,4 @@
-// 戰情總覽色塊點擊後跳來的「狀態清單」頁（分工單 p.2 跳頁 + p.4 共用版面 + p.5/6/7 舉手）。
+// 物資總覽色塊點擊後跳來的「狀態清單」頁（分工單 p.2 跳頁 + p.4 共用版面 + p.5/6/7 舉手）。
 // 舉手邏輯（依需求修正）：需求方＝「我的據點」（自動、不用選），要選的是「哪個據點有貨」——
 // 來源下拉只列出實際有此品項庫存的其他據點並顯示現有數量。來源據點之後透過物資轉移補貨。
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
@@ -245,7 +245,7 @@ export function StatusList() {
       <div className="container-fluid mt-4">
         <div className="alert alert-warning">未知的狀態頁面。</div>
         <Link className="btn btn-secondary" to="/">
-          返回戰情總覽
+          返回物資總覽
         </Link>
       </div>
     )
@@ -263,7 +263,7 @@ export function StatusList() {
           {c.label}
         </h2>
         <Link className="btn btn-outline-secondary" to="/">
-          <i className="bi bi-arrow-left" /> 返回戰情總覽
+          <i className="bi bi-arrow-left" /> 返回物資總覽
         </Link>
       </div>
       <FlashMessage />

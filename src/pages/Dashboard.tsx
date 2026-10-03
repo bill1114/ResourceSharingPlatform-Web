@@ -14,7 +14,7 @@ import { functionErrorMessage } from '../lib/functionError'
 import { logActivity } from '../lib/activityLog'
 import type { SupplyLocation, SupplyRequest } from '../types/db'
 
-// 戰情總覽全域彙總（分工單 #2/#3）：改讀 dashboard_location_status /
+// 物資總覽全域彙總（分工單 #2/#3）：改讀 dashboard_location_status /
 // dashboard_summary（SECURITY DEFINER、只回統計數字），讓全部角色看到一致的
 // 全部據點狀態，不再受「非總管只看自己據點」的 RLS 影響。
 interface LocationStatusRow {
@@ -289,7 +289,7 @@ export function Dashboard() {
                         const isDisposal = r.request_type === 'disposal'
                         return (
                         <tr key={r.id}>
-                          <td className="col-min">{new Date(r.created_at).toLocaleString('zh-TW')}</td>
+                          <td className="col-min">{new Date(r.created_at).toLocaleDateString('zh-TW')}</td>
                           <td>
                             {isDisposal && <span className="badge bg-dark me-1">報廢申請</span>}
                             <strong>{r.item_name}</strong>

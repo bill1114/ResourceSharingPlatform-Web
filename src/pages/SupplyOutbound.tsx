@@ -1,5 +1,5 @@
-// 物資領用（發放）— 改為「以領用人為主體的批次領用」：
-//   步驟一 領用人資料（姓名／聯絡方式／所屬鄉鎮／身分別）
+// 物資領用（發放）— 改為「以使用人為主體的批次領用」：
+//   步驟一 使用人資料（姓名／聯絡方式／所屬鄉鎮／身分別）
 //   步驟二 發放據點（非管理人員鎖定自己的據點）
 //   步驟三 領用清單（可重複開彈窗加入多項物資，各自輸入數量）
 // 送出時整批走 outbound-create Edge Function → outbound_create_batch()，
@@ -66,9 +66,9 @@ export function SupplyOutboundCreate() {
   const [expiringItems, setExpiringItems] = useState<SupplyItem[]>([])
   const [pendingItemId, setPendingItemId] = useState<number | null>(null)
 
-  // 一張單多位領用人，每位各自的物資清單。
+  // 一張單多位使用人，每位各自的物資清單。
   const [recipients, setRecipients] = useState<RecipientBlock[]>([blankRecipient()])
-  const [itemModalFor, setItemModalFor] = useState<number | null>(null) // 正在為哪位領用人加物資（recipient.key）
+  const [itemModalFor, setItemModalFor] = useState<number | null>(null) // 正在為哪位使用人加物資（recipient.key）
   const [districtModalFor, setDistrictModalFor] = useState<number | null>(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
@@ -89,7 +89,7 @@ export function SupplyOutboundCreate() {
     void fetchExpiringItems(expiryScope).then(setExpiringItems)
   }, [expiryScope])
 
-  // 同一批次跨「所有領用人」已加入的數量，都要從可領數量扣掉。
+  // 同一批次跨「所有使用人」已加入的數量，都要從可領數量扣掉。
   const remainingOf = useCallback(
     (item: SupplyItem) => item.quantity - recipients.reduce((s, r) => s + (r.lines.find((l) => l.item.id === item.id)?.quantity ?? 0), 0),
     [recipients]
@@ -105,7 +105,7 @@ export function SupplyOutboundCreate() {
     setRecipients((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)))
   }
 
-  // 加物資到某位領用人（同批次自動累加）。
+  // 加物資到某位使用人（同批次自動累加）。
   const addLineTo = useCallback((key: number, item: SupplyItem, quantity: number) => {
     setError(null)
     setRecipients((prev) =>
@@ -129,7 +129,7 @@ export function SupplyOutboundCreate() {
     setRecipients((prev) => prev.map((r) => (r.key === key ? { ...r, lines: r.lines.filter((l) => l.item.id !== itemId) } : r)))
   }
 
-  // 即期快選／戰情總覽帶入：加到第一位領用人。
+  // 即期快選／物資總覽帶入：加到第一位使用人。
   const addToFirst = useCallback((item: SupplyItem, quantity: number) => {
     setError(null)
     setRecipients((prev) => {
@@ -187,9 +187,9 @@ export function SupplyOutboundCreate() {
 
   function validate(): string | null {
     if (!effectiveLocationId) return isAdmin ? '請選擇發放據點' : '您的帳號尚未指定所屬據點，無法領用'
-    if (recipients.length === 0) return '請至少加入一位領用人'
+    if (recipients.length === 0) return '請至少加入一位使用人'
     for (const r of recipients) {
-      if (!r.name.trim()) return '每一位領用人都要填姓名'
+      if (!r.name.trim()) return '每一位使用人都要填姓名'
       if (!r.district) return `「${r.name || '未命名'}」請選擇所屬鄉鎮`
       if (!r.identity) return `「${r.name || '未命名'}」請選擇身分別`
       if (r.lines.length === 0) return `「${r.name}」至少要加入一項物資`
@@ -204,7 +204,7 @@ export function SupplyOutboundCreate() {
       byItem.set(l.item.id, cur)
     }
     for (const { qty, item } of byItem.values()) {
-      if (qty > item.quantity) return `「${item.item_name}」全部領用人合計 ${qty} 超過現有庫存（${item.quantity} ${item.unit ?? ''}）`
+      if (qty > item.quantity) return `「${item.item_name}」全部使用人合計 ${qty} 超過現有庫存（${item.quantity} ${item.unit ?? ''}）`
     }
     return null
   }
@@ -250,7 +250,7 @@ export function SupplyOutboundCreate() {
       return
     }
     const totalQty = recipients.reduce((s, r) => s + r.lines.reduce((t, l) => t + l.quantity, 0), 0)
-    void logActivity({ action: 'outbound', category: '庫存異動', targetTable: 'supply_outbound_log', locationId: effectiveLocationId ?? null, summary: `領用發放（${recipients.length} 位領用人、共 ${totalQty} 件）`, detail: { recipients: recipients.map((r) => ({ name: r.name.trim(), items: r.lines.map((l) => ({ name: l.item.item_name, quantity: l.quantity })) })) } })
+    void logActivity({ action: 'outbound', category: '庫存異動', targetTable: 'supply_outbound_log', locationId: effectiveLocationId ?? null, summary: `領用發放（${recipients.length} 位使用人、共 ${totalQty} 件）`, detail: { recipients: recipients.map((r) => ({ name: r.name.trim(), items: r.lines.map((l) => ({ name: l.item.item_name, quantity: l.quantity })) })) } })
     navigate('/outbound', { state: { flash: data.message } })
   }
 
@@ -298,14 +298,14 @@ export function SupplyOutboundCreate() {
               </div>
             </div>
 
-            {/* 領用人（可多位） */}
+            {/* 使用人（可多位） */}
             {recipients.map((r, ri) => {
               const rTotalQty = r.lines.reduce((a, l) => a + (Number.isFinite(l.quantity) ? l.quantity : 0), 0)
               return (
                 <div className="card shadow-sm mb-4 border-primary" key={r.key}>
                   <div className="card-header bg-primary-subtle text-dark d-flex justify-content-between align-items-center">
                     <span>
-                      <i className="bi bi-person-vcard" /> 領用人 {ri + 1}
+                      <i className="bi bi-person-vcard" /> 使用人 {ri + 1}
                     </span>
                     {recipients.length > 1 && (
                       <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeRecipient(r.key)}>
@@ -316,11 +316,11 @@ export function SupplyOutboundCreate() {
                   <div className="card-body">
                     <div className="row">
                       <div className="col-md-6 mb-3">
-                        <label className="form-label">領用人姓名 *</label>
+                        <label className="form-label">使用人姓名 *</label>
                         <input className="form-control" maxLength={50} placeholder="例如：陳先生" value={r.name} onChange={(e) => patchRecipient(r.key, { name: e.target.value })} />
                       </div>
                       <div className="col-md-6 mb-3">
-                        <label className="form-label">領用人電話</label>
+                        <label className="form-label">使用人電話</label>
                         <input className="form-control" maxLength={50} placeholder="例如：手機或地址" value={r.contact} onChange={(e) => patchRecipient(r.key, { contact: e.target.value })} />
                       </div>
                       <div className="col-md-6 mb-3">
@@ -399,7 +399,7 @@ export function SupplyOutboundCreate() {
 
             <div className="mb-4">
               <button type="button" className="btn btn-outline-primary" onClick={addRecipient}>
-                <i className="bi bi-person-plus" /> 新增領用人
+                <i className="bi bi-person-plus" /> 新增使用人
               </button>
             </div>
 
@@ -430,10 +430,10 @@ export function SupplyOutboundCreate() {
           <div className="alert alert-info">
             <strong><i className="bi bi-info-circle" /> 領用說明</strong>
             <ul className="mb-0 mt-2">
-              <li>一張單可加入多位領用人，每位各自填資料與物資清單</li>
-              <li>按「新增領用人」再加一位，最後一次確認送出</li>
+              <li>一張單可加入多位使用人，每位各自填資料與物資清單</li>
+              <li>按「新增使用人」再加一位，最後一次確認送出</li>
               <li>物資清單只顯示所屬據點的庫存；只有最高權限管理人員能切換據點</li>
-              <li>全部領用人在同一個交易裡扣庫存，其中一項不足會整批取消</li>
+              <li>全部使用人在同一個交易裡扣庫存，其中一項不足會整批取消</li>
             </ul>
           </div>
           <div className="alert alert-warning">
@@ -482,7 +482,7 @@ export function SupplyOutboundCreate() {
                 {recipients.map((r, ri) => (
                   <div className="card border mb-2" key={r.key}>
                     <div className="card-header bg-light py-2">
-                      <strong>領用人 {ri + 1}：{r.name}</strong>
+                      <strong>使用人 {ri + 1}：{r.name}</strong>
                       <span className="text-muted small ms-2">
                         {r.contact ? `${r.contact}／` : ''}{r.district ?? '—'}
                         <span className="ms-1"><span className={`badge ${recipientIdentityBadgeClass(r.identity)}`}>{recipientIdentityDisplayName(r.identity)}</span></span>
@@ -504,7 +504,7 @@ export function SupplyOutboundCreate() {
                   </div>
                 ))}
                 <div className="alert alert-warning mt-2 mb-0">
-                  <i className="bi bi-exclamation-triangle" /> 合計 {recipients.length} 位領用人、{grandTotalItems} 項、{grandTotalQty} 件。按「確定領用」會<strong>立刻扣除庫存</strong>，請再確認一次。
+                  <i className="bi bi-exclamation-triangle" /> 合計 {recipients.length} 位使用人、{grandTotalItems} 項、{grandTotalQty} 件。按「確定領用」會<strong>立刻扣除庫存</strong>，請再確認一次。
                 </div>
               </div>
               <div className="modal-footer">
@@ -648,7 +648,7 @@ export function SupplyOutboundIndex() {
       return
     }
     if (!editForm.name.trim() || !editForm.district || !editForm.identity) {
-      setMessage({ type: 'danger', text: '請填領用人姓名、所屬鄉鎮與身分別' })
+      setMessage({ type: 'danger', text: '請填使用人姓名、所屬鄉鎮與身分別' })
       return
     }
     setEditSaving(true)
@@ -668,7 +668,7 @@ export function SupplyOutboundIndex() {
       setMessage({ type: 'danger', text: error.message })
       return
     }
-    void logActivity({ action: 'outbound_edit', category: '庫存異動', targetTable: 'supply_outbound_log', targetId: editTarget.id, locationId: editTarget.location_id, summary: `修改領用紀錄 #${editTarget.id}（領用人 ${editForm.name.trim()}、數量 ${qty}）` })
+    void logActivity({ action: 'outbound_edit', category: '庫存異動', targetTable: 'supply_outbound_log', targetId: editTarget.id, locationId: editTarget.location_id, summary: `修改領用紀錄 #${editTarget.id}（使用人 ${editForm.name.trim()}、數量 ${qty}）` })
     setEditTarget(null)
     setMessage({ type: 'success', text: '領用紀錄已更新，庫存已回算' })
     await load()
@@ -706,17 +706,17 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
 @media print{body{padding:0}}
 </style></head><body>
 <h1>愛心轉運站 · 物資領用單</h1>
-<p class="sub">領用單號：${esc(log.batch_id ?? '#' + log.id)}　列印時間：${esc(new Date().toLocaleString('zh-TW'))}</p>
+<p class="sub">領用單號：${esc(log.batch_id ?? '#' + log.id)}　列印時間：${esc(new Date().toLocaleDateString('zh-TW'))}</p>
 <table class="meta">
-<tr><td width="15%"><b>領用時間</b></td><td width="35%">${esc(new Date(log.outbound_time).toLocaleString('zh-TW'))}</td><td width="15%"><b>發放據點</b></td><td>${esc(locationName(log.location_id))}</td></tr>
-<tr><td><b>領用人</b></td><td>${esc(log.recipient_name)}</td><td><b>聯絡方式</b></td><td>${esc(log.recipient_contact ?? '')}</td></tr>
+<tr><td width="15%"><b>領用時間</b></td><td width="35%">${esc(new Date(log.outbound_time).toLocaleDateString('zh-TW'))}</td><td width="15%"><b>發放據點</b></td><td>${esc(locationName(log.location_id))}</td></tr>
+<tr><td><b>使用人</b></td><td>${esc(log.recipient_name)}</td><td><b>聯絡方式</b></td><td>${esc(log.recipient_contact ?? '')}</td></tr>
 <tr><td><b>所屬鄉鎮</b></td><td>${esc((log.recipient_precinct ? log.recipient_precinct + ' / ' : '') + (log.recipient_district ?? ''))}</td><td><b>身分別</b></td><td>${esc(recipientIdentityDisplayName(log.recipient_identity))}</td></tr>
 <tr><td><b>操作人員</b></td><td>${esc(log.operator ?? '')}</td><td><b>備註</b></td><td>${esc(log.remark ?? '')}</td></tr>
 </table>
 <table class="items"><thead><tr><th style="width:40px">#</th><th>物資</th><th style="width:130px">規格</th><th style="width:120px;text-align:right">數量</th></tr></thead>
 <tbody>${itemRows}</tbody>
 <tfoot><tr><th colspan="3" style="text-align:right">合計</th><th style="text-align:right">${rows.length} 項 / ${totalQty} 件</th></tr></tfoot></table>
-<div class="sign"><div>領用人簽名</div><div>經辦人簽名</div></div>
+<div class="sign"><div>使用人簽名</div><div>經辦人簽名</div></div>
 </body></html>`
     const iframe = document.createElement('iframe')
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
@@ -792,13 +792,13 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
 
   function handleExport() {
     exportToExcel<SupplyOutboundLog>('領用紀錄', '領用紀錄', [
-      { header: '領用時間', value: (l) => new Date(l.outbound_time).toLocaleString('zh-TW') },
+      { header: '領用時間', value: (l) => new Date(l.outbound_time).toLocaleDateString('zh-TW') },
       { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
       { header: '來源據點', value: (l) => locationName(l.location_id) },
       { header: '領用數量', value: (l) => l.outbound_quantity, total: true },
       { header: '單位', value: (l) => itemOf(l.supply_item_id)?.unit ?? '' },
-      { header: '領用人', value: (l) => l.recipient_name },
+      { header: '使用人', value: (l) => l.recipient_name },
       { header: '聯絡方式', value: (l) => l.recipient_contact ?? '' },
       { header: '區', value: (l) => l.recipient_precinct ?? '' },
       { header: '所屬鄉鎮', value: (l) => l.recipient_district ?? '' },
@@ -806,7 +806,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
       { header: '操作人員', value: (l) => l.operator ?? '' },
       { header: '備註', value: (l) => l.remark ?? '' },
       { header: '狀態', value: (l) => (l.is_cancelled ? '已取消' : '已領用') },
-      { header: '取消時間', value: (l) => (l.cancelled_at ? new Date(l.cancelled_at).toLocaleString('zh-TW') : '') },
+      { header: '取消時間', value: (l) => (l.cancelled_at ? new Date(l.cancelled_at).toLocaleDateString('zh-TW') : '') },
       { header: '取消人員', value: (l) => l.cancelled_by ?? '' },
       { header: '取消原因', value: (l) => l.cancel_reason ?? '' },
     ], filtered)
@@ -843,7 +843,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
           <div className="row g-3">
             <div className="col-md-4">
               <label className="form-label">關鍵字</label>
-              <input className="form-control" placeholder="搜尋領用人、聯絡方式、鄉鎮或物資" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+              <input className="form-control" placeholder="搜尋使用人、聯絡方式、鄉鎮或物資" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
             </div>
             <div className="col-md-4">
               <label className="form-label">物資品項</label>
@@ -925,7 +925,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                   <th>物資名稱</th>
                   <th className="col-min">來源據點</th>
                   <th className="col-min">領用數量</th>
-                  <th>領用人</th>
+                  <th>使用人</th>
                   <th>聯絡方式</th>
                   <th className="col-min">所屬鄉鎮</th>
                   <th className="col-min">身分別</th>
@@ -952,7 +952,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                   filtered.map((log) => (
                     // 已取消的整列淡化 + 刪除線，一眼看得出這筆不算數
                     <tr key={log.id} className={log.is_cancelled ? 'text-muted' : undefined}>
-                      <td className="col-min">{new Date(log.outbound_time).toLocaleString('zh-TW')}</td>
+                      <td className="col-min">{new Date(log.outbound_time).toLocaleDateString('zh-TW')}</td>
                       <td>
                         <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
                         {itemOf(log.supply_item_id)?.specification ? (
@@ -998,7 +998,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                             <div className="small">
                               {log.cancelled_by}
                               {log.cancelled_at && <br />}
-                              {log.cancelled_at && new Date(log.cancelled_at).toLocaleString('zh-TW')}
+                              {log.cancelled_at && new Date(log.cancelled_at).toLocaleDateString('zh-TW')}
                             </div>
                             {log.cancel_reason && <div className="small fst-italic">{log.cancel_reason}</div>}
                           </>
@@ -1051,7 +1051,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
           quantityLabel={`${cancelTarget.outbound_quantity} ${itemOf(cancelTarget.supply_item_id)?.unit ?? ''}`}
           recipientName={cancelTarget.recipient_name}
           locationName={locationName(cancelTarget.location_id)}
-          outboundTime={new Date(cancelTarget.outbound_time).toLocaleString('zh-TW')}
+          outboundTime={new Date(cancelTarget.outbound_time).toLocaleDateString('zh-TW')}
           sameBatchCount={sameBatchCount(cancelTarget)}
           submitting={cancelling}
           onCancel={() => setCancelTarget(null)}
@@ -1073,9 +1073,9 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                 <div className="modal-body">
                   <div className="card bg-light border mb-3"><div className="card-body">
                     <div className="row g-2">
-                      <div className="col-sm-6"><div className="text-muted small">領用時間</div><div className="fw-bold">{new Date(detailTarget.outbound_time).toLocaleString('zh-TW')}</div></div>
+                      <div className="col-sm-6"><div className="text-muted small">領用時間</div><div className="fw-bold">{new Date(detailTarget.outbound_time).toLocaleDateString('zh-TW')}</div></div>
                       <div className="col-sm-6"><div className="text-muted small">發放據點</div><div className="fw-bold">{locationName(detailTarget.location_id)}</div></div>
-                      <div className="col-sm-6"><div className="text-muted small">領用人</div><div className="fw-bold">{detailTarget.recipient_name}</div></div>
+                      <div className="col-sm-6"><div className="text-muted small">使用人</div><div className="fw-bold">{detailTarget.recipient_name}</div></div>
                       <div className="col-sm-6"><div className="text-muted small">聯絡方式</div><div>{detailTarget.recipient_contact || '—'}</div></div>
                       <div className="col-sm-6"><div className="text-muted small">所屬鄉鎮</div><div>{detailTarget.recipient_precinct ? `${detailTarget.recipient_precinct} / ` : ''}{detailTarget.recipient_district ?? '—'}</div></div>
                       <div className="col-sm-6"><div className="text-muted small">身分別</div><div><span className={`badge ${recipientIdentityBadgeClass(detailTarget.recipient_identity)}`}>{recipientIdentityDisplayName(detailTarget.recipient_identity)}</span></div></div>
@@ -1122,7 +1122,7 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                 </div>
                 <div className="modal-body">
                   <div className="alert alert-light border small mb-3">
-                    {locationName(editTarget.location_id)}｜領用時間 {new Date(editTarget.outbound_time).toLocaleString('zh-TW')}｜操作人 {editTarget.operator}
+                    {locationName(editTarget.location_id)}｜領用時間 {new Date(editTarget.outbound_time).toLocaleDateString('zh-TW')}｜操作人 {editTarget.operator}
                     <div className="text-muted">改數量／品項會自動回算庫存（退回原批次、再扣新的）。</div>
                   </div>
                   <div className="row">
@@ -1143,11 +1143,11 @@ table{width:100%;border-collapse:collapse;margin:8px 0}
                       <input className="form-control" type="number" min={1} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} />
                     </div>
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">領用人姓名 *</label>
+                      <label className="form-label">使用人姓名 *</label>
                       <input className="form-control" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                     </div>
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">領用人電話</label>
+                      <label className="form-label">使用人電話</label>
                       <input className="form-control" value={editForm.contact} onChange={(e) => setEditForm({ ...editForm, contact: e.target.value })} />
                     </div>
                     <div className="col-md-6 mb-3">

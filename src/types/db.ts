@@ -72,7 +72,7 @@ export interface SupplyOutboundLog {
   operator: string | null
   outbound_time: string
   remark: string | null
-  // 批次出庫與領用人資料擴充；既有單筆紀錄可為 null。
+  // 批次出庫與使用人資料擴充；既有單筆紀錄可為 null。
   batch_id: string | null
   recipient_precinct: string | null
   recipient_district: string | null

@@ -82,7 +82,7 @@ export function SupplyDisposalCreate() {
     setQuantity(String(item.quantity))
   }
 
-  // 戰情總覽「已過期」清單的「報廢」帶 ?supplyItemId= 進來時：直接抓該批次並帶入
+  // 物資總覽「已過期」清單的「報廢」帶 ?supplyItemId= 進來時：直接抓該批次並帶入
   // （沿用 quickPick：設定據點、選取批次、過期自動帶原因、帶入現有數量）。
   useEffect(() => {
     const id = searchParams.get('supplyItemId')
@@ -374,7 +374,7 @@ export function SupplyDisposalIndex() {
 
   function handleExport() {
     exportToExcel<SupplyDisposalLog>('報廢紀錄', '報廢紀錄', [
-      { header: '報廢時間', value: (l) => new Date(l.disposal_time).toLocaleString('zh-TW') },
+      { header: '報廢時間', value: (l) => new Date(l.disposal_time).toLocaleDateString('zh-TW') },
       { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
       { header: '據點', value: (l) => locationName(l.location_id) },
@@ -490,7 +490,7 @@ export function SupplyDisposalIndex() {
                 ) : (
                   filteredLogs.map((log) => (
                     <tr key={log.id}>
-                      <td className="col-min">{new Date(log.disposal_time).toLocaleString('zh-TW')}</td>
+                      <td className="col-min">{new Date(log.disposal_time).toLocaleDateString('zh-TW')}</td>
                       <td>
                         <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
                         {itemOf(log.supply_item_id)?.specification ? (

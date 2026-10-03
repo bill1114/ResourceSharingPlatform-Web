@@ -36,7 +36,7 @@ export function DistrictPickerModal({
         <div className="modal-content">
           <div className="modal-header">
             <h5 className="modal-title">
-              <i className="bi bi-geo-alt" /> 選擇領用人所屬鄉鎮
+              <i className="bi bi-geo-alt" /> 選擇使用人所屬鄉鎮
             </h5>
             <button type="button" className="btn-close" onClick={onCancel} />
           </div>
@@ -368,7 +368,7 @@ export function OutboundConfirmModal({
               <div className="card-body">
                 <div className="row g-2">
                   <div className="col-sm-6">
-                    <div className="text-muted small">領用人</div>
+                    <div className="text-muted small">使用人</div>
                     <div className="fw-bold">{recipientName}</div>
                   </div>
                   <div className="col-sm-6">
@@ -538,7 +538,7 @@ export function OutboundCancelModal({
                     <div>{locationName}</div>
                   </div>
                   <div className="col-6">
-                    <div className="text-muted small">領用人</div>
+                    <div className="text-muted small">使用人</div>
                     <div>{recipientName}</div>
                   </div>
                   <div className="col-6">
@@ -555,7 +555,7 @@ export function OutboundCancelModal({
                 className="form-control"
                 rows={2}
                 maxLength={200}
-                placeholder="例如：登錄錯誤、領用人未到"
+                placeholder="例如：登錄錯誤、使用人未到"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
               />

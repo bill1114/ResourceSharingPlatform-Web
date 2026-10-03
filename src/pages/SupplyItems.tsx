@@ -167,7 +167,7 @@ export function SupplyItems() {
   const [toDate, setToDate] = useState('')
   const [showHidden, setShowHidden] = useState(false) // #4：顯示「數量0超過7天」被隱藏的批次
 
-  // 從戰情總覽「查看物資」帶入的據點篩選（?locationId=）
+  // 從物資總覽「查看物資」帶入的據點篩選（?locationId=）
   useEffect(() => {
     const qLocationId = searchParams.get('locationId')
     if (qLocationId) setLocationFilter(qLocationId)

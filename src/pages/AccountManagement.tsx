@@ -57,7 +57,7 @@ export function AccountManagement() {
               <td><strong>{p.username}</strong></td>
               <td>{p.display_name ?? '—'}</td>
               <td>{roleDisplayName(p.role_name)}</td>
-              <td className="col-min">{p.password_changed_at ? new Date(p.password_changed_at).toLocaleString('zh-TW') : '—'}</td>
+              <td className="col-min">{p.password_changed_at ? new Date(p.password_changed_at).toLocaleDateString('zh-TW') : '—'}</td>
               <td className="text-end text-nowrap">
                 <button className="btn btn-sm btn-outline-secondary" onClick={() => void clearPwFlag(p)}><i className="bi bi-check2" /> 設為正常</button>
               </td>

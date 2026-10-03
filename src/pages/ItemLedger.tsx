@@ -269,7 +269,7 @@ export function ItemLedger() {
       { header: '說明', value: (e) => e.detail },
       { header: '目前數量', value: (e) => e.runningQty },
       { header: '所在據點', value: (e) => locationName(e.locationId) },
-      { header: '時間', value: (e) => new Date(e.time).toLocaleString('zh-TW') },
+      { header: '時間', value: (e) => new Date(e.time).toLocaleDateString('zh-TW') },
       { header: '操作人', value: (e) => e.operator ?? '' },
     ], filtered)
   }
@@ -447,7 +447,7 @@ export function ItemLedger() {
                             <td>
                               <span className="badge" style={locationColorStyle(e.locationId)}>{locationName(e.locationId)}</span>
                             </td>
-                            <td className="text-nowrap small text-muted">{new Date(e.time).toLocaleString('zh-TW')}</td>
+                            <td className="text-nowrap small text-muted">{new Date(e.time).toLocaleDateString('zh-TW')}</td>
                             <td className="text-nowrap">
                               {canAdjust(e.locationId) ? (
                                 <>

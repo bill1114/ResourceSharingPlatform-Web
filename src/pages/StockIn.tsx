@@ -10,7 +10,7 @@ export function StockIn() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const isAdmin = profile?.role_name === Roles.Admin
-  // 物資清單僅總管可看；幫主入庫成功後回戰情總覽。
+  // 物資清單僅總管可看；幫主入庫成功後回物資總覽。
   const afterSaved = isAdmin ? '/supply-items' : '/'
 
   return (

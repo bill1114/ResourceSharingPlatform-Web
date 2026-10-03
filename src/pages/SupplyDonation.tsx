@@ -17,7 +17,7 @@ export function SupplyDonationIndex() {
   const [logs, setLogs] = useState<SupplyStockInLog[]>([])
   const [locations, setLocations] = useState<SupplyLocation[]>([])
   const [items, setItems] = useState<SupplyItem[]>([])
-  // 總量不足／啟動募資：直接內嵌顯示（與戰情總覽同一來源 global_low_stock_view）
+  // 總量不足／啟動募資：直接內嵌顯示（與物資總覽同一來源 global_low_stock_view）
   const [globalLow, setGlobalLow] = useState<{ category: string; item_name: string; specification: string | null; unit: string; total_quantity: number; global_threshold: number }[]>([])
   const [keyword, setKeyword] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
@@ -81,7 +81,7 @@ export function SupplyDonationIndex() {
 
   function handleExport() {
     exportToExcel<SupplyStockInLog>('捐贈紀錄', '捐贈紀錄', [
-      { header: '入庫時間', value: (l) => new Date(l.stock_in_time).toLocaleString('zh-TW') },
+      { header: '入庫時間', value: (l) => new Date(l.stock_in_time).toLocaleDateString('zh-TW') },
       { header: '物資名稱', value: (l) => itemOf(l.supply_item_id)?.item_name ?? `物資 #${l.supply_item_id}` },
       { header: '規格', value: (l) => itemOf(l.supply_item_id)?.specification ?? '' },
       { header: '據點', value: (l) => locationName(l.location_id) },
@@ -225,7 +225,7 @@ export function SupplyDonationIndex() {
                     ) : (
                       filteredLogs.map((log) => (
                         <tr key={log.id}>
-                          <td className="col-min">{new Date(log.stock_in_time).toLocaleString('zh-TW')}</td>
+                          <td className="col-min">{new Date(log.stock_in_time).toLocaleDateString('zh-TW')}</td>
                           <td>
                             <strong>{itemOf(log.supply_item_id)?.item_name ?? `物資 #${log.supply_item_id}`}</strong>
                             {itemOf(log.supply_item_id)?.specification ? <span className="text-muted"> ／{itemOf(log.supply_item_id)?.specification}</span> : null}
@@ -264,7 +264,7 @@ export function SupplyDonationIndex() {
           </div>
         </div>
         <div className="col-md-4">
-          {/* 總量不足／啟動募資：直接內嵌清單（與戰情總覽同一來源） */}
+          {/* 總量不足／啟動募資：直接內嵌清單（與物資總覽同一來源） */}
           <div className="card shadow-sm border-0 h-100">
             <div className="card-header" style={{ backgroundColor: statusColorMap.globalLowStock.bg, color: statusColorMap.globalLowStock.text }}>
               <i className={`bi ${statusColorMap.globalLowStock.icon}`} /> {statusColorMap.globalLowStock.label}（{globalLow.length}）

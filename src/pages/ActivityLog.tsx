@@ -83,7 +83,7 @@ export function ActivityLog() {
 
   function handleExport() {
     exportToExcel<ActivityRow>('操作紀錄', '操作紀錄', [
-      { header: '時間', value: (r) => new Date(r.occurred_at).toLocaleString('zh-TW') },
+      { header: '時間', value: (r) => new Date(r.occurred_at).toLocaleDateString('zh-TW') },
       { header: '操作人', value: (r) => r.actor_name ?? '' },
       { header: '角色', value: (r) => roleDisplayName(r.actor_role ?? undefined) },
       { header: '分類', value: (r) => r.category },
@@ -156,7 +156,7 @@ export function ActivityLog() {
                 <tr><td colSpan={7} className="text-center text-muted py-4">沒有符合條件的紀錄</td></tr>
               ) : filtered.map((r) => (
                 <tr key={r.id}>
-                  <td className="col-min text-nowrap">{new Date(r.occurred_at).toLocaleString('zh-TW')}</td>
+                  <td className="col-min text-nowrap">{new Date(r.occurred_at).toLocaleDateString('zh-TW')}</td>
                   <td className="col-min">
                     {r.actor_name ?? '—'}
                     {r.actor_role && <span className="badge bg-light text-dark ms-1">{roleDisplayName(r.actor_role)}</span>}
@@ -190,7 +190,7 @@ export function ActivityLog() {
               </div>
               <div className="modal-body">
                 <dl className="row mb-0">
-                  <dt className="col-4">時間</dt><dd className="col-8">{new Date(detailRow.occurred_at).toLocaleString('zh-TW')}</dd>
+                  <dt className="col-4">時間</dt><dd className="col-8">{new Date(detailRow.occurred_at).toLocaleDateString('zh-TW')}</dd>
                   <dt className="col-4">操作人</dt><dd className="col-8">{detailRow.actor_name ?? '—'}（{roleDisplayName(detailRow.actor_role ?? undefined)}）</dd>
                   <dt className="col-4">動作</dt><dd className="col-8">{detailRow.action}（{detailRow.category}）</dd>
                   <dt className="col-4">說明</dt><dd className="col-8">{detailRow.summary ?? '—'}</dd>

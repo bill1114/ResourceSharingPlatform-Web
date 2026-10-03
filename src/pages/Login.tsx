@@ -33,8 +33,8 @@ export function Login() {
     setForgotName(''); setNewPw(''); setConfirmPw('')
   }
 
-  // 登入後一律導向戰情總覽（/）；唯一例外是 LINE 圖文選單的 /mobile/* 深連結，
-  // 保留使用者原本點的手機功能頁，其餘全部統一回戰情總覽。
+  // 登入後一律導向物資總覽（/）；唯一例外是 LINE 圖文選單的 /mobile/* 深連結，
+  // 保留使用者原本點的手機功能頁，其餘全部統一回物資總覽。
   const requested = (location.state as { from?: string })?.from
   const target = requested && requested.startsWith('/mobile/') ? requested : '/'
 

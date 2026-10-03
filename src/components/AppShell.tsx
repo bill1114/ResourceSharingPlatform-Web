@@ -40,7 +40,7 @@ export function AppShell() {
               <ul className="navbar-nav flex-grow-1">
                 <li className="nav-item">
                   <NavLink className="nav-link text-white" to="/">
-                    <i className="bi bi-speedometer2" /> 戰情總覽
+                    <i className="bi bi-speedometer2" /> 物資總覽
                   </NavLink>
                 </li>
                 <li className="nav-item dropdown">
