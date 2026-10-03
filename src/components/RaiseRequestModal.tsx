@@ -132,7 +132,7 @@ export function RaiseRequestModal({ target, locations, items, onClose, onDone }:
               </div>
 
               <div className="mb-3">
-                <label className="form-label">來源（物資所在）據點 *</label>
+                <label className="form-label">來源據點（物資所在） *</label>
                 {isGlobalRow ? (
                   <>
                     <select className="form-select" required value={srcLocationId} onChange={(e) => setSrcLocationId(e.target.value)}>
