@@ -15,7 +15,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { locationColorStyle } from '../lib/colors'
 import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
-import { exportToExcel } from '../lib/excelExport'
+import { exportSheetsToExcel } from '../lib/excelExport'
 import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
 import type { SupplyItem, SupplyLocation, DonationSource } from '../types/db'
@@ -201,21 +201,63 @@ export function DonorAnalysis() {
     setToDate('')
   }
 
+  // 匯出格式（依範本「捐贈分析」）：日期, 捐贈人, 捐贈物資名稱, 規格, 物資數量,
+  // 使用人姓名, 身分別, 領用數量, 結餘數量。
+  // 以「物資品項批次」分組：同一品項的捐贈列與領用列並排；結餘為品項層級
+  // （該品項捐入總量 − 已領出總量），放在該品項第一列。流向為批次層級近似，
+  // 說明見本檔頂部與畫面提示。
   function handleExport() {
-    exportToExcel<DonorGroup>('捐贈分析', '捐贈分析', [
-      { header: '排名', value: (g) => groups.indexOf(g) + 1 },
-      { header: '捐贈人', value: (g) => g.donorName },
-      { header: '聯絡方式', value: (g) => g.donorContact || '' },
-      { header: '聯絡地址', value: (g) => g.address || '' },
-      { header: '鄉鎮', value: (g) => g.district || '' },
-      { header: '身分別', value: (g) => (g.identity ? recipientIdentityDisplayName(g.identity) : '') },
-      { header: '捐贈筆數', value: (g) => g.donations.length },
-      { header: '捐贈件數', value: (g) => g.totalQuantity },
-      { header: '不同物資', value: (g) => new Set(g.donations.map((d) => d.supplyItemId)).size },
-      { header: '批次已發放件數', value: (g) => g.issuedQuantity },
-      { header: '批次目前在庫', value: (g) => g.onHandQuantity },
-      { header: '主要流向（使用人 件數）', value: (g) => g.flow.slice(0, 10).map((r) => `${r.name} ${r.quantity}`).join('、') },
-    ], groups)
+    const dateOf = (t: string) => new Date(t).toLocaleDateString('zh-TW')
+    const byItem = new Map<number, DonationRow[]>()
+    for (const d of filteredDonations) {
+      const arr = byItem.get(d.supplyItemId)
+      if (arr) arr.push(d)
+      else byItem.set(d.supplyItemId, [d])
+    }
+    const header = ['日期', '捐贈人', '捐贈物資名稱', '規格', '物資數量', '使用人姓名', '身分別', '領用數量', '結餘數量']
+    const rows: (string | number)[][] = [header]
+    const itemIds = [...byItem.keys()].sort(
+      (a, b) =>
+        (byItem.get(b)?.reduce((s, d) => s + d.quantity, 0) ?? 0) -
+        (byItem.get(a)?.reduce((s, d) => s + d.quantity, 0) ?? 0)
+    )
+    for (const id of itemIds) {
+      const it = itemOf(id)
+      const name = itemNameOf(id)
+      const spec = it?.specification ?? ''
+      const dons = (byItem.get(id) ?? []).slice().sort((a, b) => (a.time < b.time ? -1 : 1))
+      const donatedTotal = dons.reduce((s, d) => s + d.quantity, 0)
+      // 該品項的領用明細（依使用人彙總）
+      const recipMap = new Map<string, { name: string; identity: string | null; quantity: number }>()
+      let issued = 0
+      for (const o of outbounds) {
+        if (o.supply_item_id !== id) continue
+        issued += o.outbound_quantity
+        const rk = `${o.recipient_name}||${o.recipient_contact ?? ''}`
+        const r = recipMap.get(rk)
+        if (r) r.quantity += o.outbound_quantity
+        else recipMap.set(rk, { name: o.recipient_name, identity: o.recipient_identity, quantity: o.outbound_quantity })
+      }
+      const flow = [...recipMap.values()].sort((a, b) => b.quantity - a.quantity)
+      const balance = donatedTotal - issued
+      const maxLen = Math.max(dons.length, flow.length, 1)
+      for (let i = 0; i < maxLen; i++) {
+        const d = dons[i]
+        const f = flow[i]
+        rows.push([
+          d ? dateOf(d.time) : '',
+          d ? d.donorName : '',
+          d ? name : '',
+          d ? spec : '',
+          d ? d.quantity : '',
+          f ? f.name || '（未填）' : '',
+          f ? (f.identity ? recipientIdentityDisplayName(f.identity) : '') : '',
+          f ? f.quantity : '',
+          i === 0 ? balance : '',
+        ])
+      }
+    }
+    exportSheetsToExcel('捐贈分析', [{ name: '捐贈分析', rows }])
   }
 
   return (

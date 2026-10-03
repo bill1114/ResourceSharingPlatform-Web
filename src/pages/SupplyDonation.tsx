@@ -91,7 +91,8 @@ export function SupplyDonationIndex() {
       { header: '聯絡電話', value: (l) => l.donor_contact ?? '' },
       { header: '聯絡地址', value: (l) => l.donor_address ?? '' },
       { header: '操作人員', value: (l) => l.operator ?? '' },
-    ], filteredLogs)
+      // 範本要求：沒有捐贈者的入庫紀錄（例如純入庫、系統轉移）不列入捐贈紀錄匯出。
+    ], filteredLogs.filter((l) => (l.donor_name ?? '').trim() !== ''))
   }
 
   function openEdit(row: SupplyStockInLog) {

@@ -14,11 +14,11 @@
 // 直接讀 supply_outbound_log 明細（RLS 一樣限縮據點），已取消的一律排除。
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { recipientIdentityDisplayName } from '../lib/yunlinDistricts'
+import { recipientIdentityDisplayName, RecipientIdentities, YunlinPrecincts } from '../lib/yunlinDistricts'
 import { AnalysisFilterModal } from '../components/AnalysisFilterModal'
 import { DateRangeFilter } from '../components/DateRangeFilter'
  import { withinRange } from '../lib/dateRange'
-import { exportToExcel } from '../lib/excelExport'
+import { exportSheetsToExcel } from '../lib/excelExport'
 import {
   AllFilterFields,
   EMPTY_VALUE,
@@ -233,21 +233,121 @@ export function RecipientAnalysis() {
 
   const detailChoices = AllFilterFields.filter((f) => f !== primaryField)
 
-  // 匯出目前「篩選後」的樞紐結果（依畫面上的主軸／明細維度）。
-  function handleExport() {
-    exportToExcel<GroupRow>(
-      `領取分析_${FilterFieldLabels[primaryField]}`,
-      '領取分析',
-      [
-        { header: '排名', value: (g) => groups.indexOf(g) + 1 },
-        { header: FilterFieldLabels[primaryField], value: (g) => g.label },
-        { header: '領取次數', value: (g) => g.pickupCount },
-        { header: '領取件數', value: (g) => g.quantity },
-        { header: '使用人數', value: (g) => g.recipientCount },
-        { header: `${FilterFieldLabels[detailField]}分佈`, value: (g) => g.details.map((d) => `${d.label} ${d.quantity}`).join('、') },
-      ],
-      groups
-    )
+  const dateStr = useCallback((t: string) => new Date(t).toLocaleDateString('zh-TW'), [])
+  // 一次領取事件：同一 batch_id 算一次；沒有 batch_id 的舊資料，每筆各算一次。
+  const eventKey = (l: SupplyOutboundLog) => l.batch_id ?? `single-${l.id}`
+
+  // 匯出①：領取分析_使用人 —— 依使用人分組，列出其各物資品項與數量。
+  // 欄位（依範本）：每次領用日期, 使用人, 領取次數, 領取件數, 物資品項, 數量, 領用人/社工。
+  function handleExportByUser() {
+    const header = ['每次領用日期', '使用人', '領取次數', '領取件數', '物資品項', '數量', '領用人/社工']
+    const rows: (string | number)[][] = [header]
+    const map = new Map<
+      string,
+      { name: string; dates: Set<string>; events: Set<string>; operators: Set<string>; total: number; items: Map<string, number> }
+    >()
+    for (const l of filteredLogs) {
+      const k = `${l.recipient_name}||${l.recipient_contact ?? ''}`
+      let g = map.get(k)
+      if (!g) {
+        g = { name: l.recipient_name || '（未填）', dates: new Set(), events: new Set(), operators: new Set(), total: 0, items: new Map() }
+        map.set(k, g)
+      }
+      g.dates.add(dateStr(l.outbound_time))
+      g.events.add(eventKey(l))
+      if (l.operator) g.operators.add(l.operator)
+      g.total += l.outbound_quantity
+      const item = itemNameOf(l.supply_item_id)
+      g.items.set(item, (g.items.get(item) ?? 0) + l.outbound_quantity)
+    }
+    const sorted = [...map.values()].sort((a, b) => b.total - a.total)
+    for (const g of sorted) {
+      const items = [...g.items.entries()].sort((a, b) => b[1] - a[1])
+      const dates = [...g.dates].sort().join('、')
+      const ops = [...g.operators].join('、')
+      items.forEach(([item, qty], i) => {
+        rows.push([
+          i === 0 ? dates : '',
+          i === 0 ? g.name : '',
+          i === 0 ? g.events.size : '',
+          i === 0 ? g.total : '',
+          item,
+          qty,
+          i === 0 ? ops : '',
+        ])
+      })
+      if (items.length === 0) rows.push([dates, g.name, g.events.size, g.total, '', '', ops])
+    }
+    exportSheetsToExcel('領取分析_使用人', [{ name: '領取分析', rows }])
+  }
+
+  // 匯出②：領取分析（總分析）—— 兩個工作表。
+  //   工作表1 總分析：依「日期×物資品項」彙總，含身分別(件數)、領用人數、各鄉鎮(件數)、領取件數。
+  //   工作表2 操作人員-社工：每筆領取明細。
+  function handleExportSummary() {
+    const townships = YunlinPrecincts.flatMap((p) => p.townships)
+    // --- 工作表1：總分析 ---
+    const head1 = ['日期', '物資品項', '領取次數', '低收', '中低收', '一般戶', '領用人數', ...townships, '領取件數']
+    const rows1: (string | number)[][] = [head1]
+    const map = new Map<
+      string,
+      {
+        date: string
+        item: string
+        events: Set<string>
+        recipients: Set<string>
+        qty: number
+        identity: Record<string, number>
+        town: Record<string, number>
+      }
+    >()
+    for (const l of filteredLogs) {
+      const date = dateStr(l.outbound_time)
+      const item = itemNameOf(l.supply_item_id)
+      const k = `${date}||${item}`
+      let g = map.get(k)
+      if (!g) {
+        g = { date, item, events: new Set(), recipients: new Set(), qty: 0, identity: {}, town: {} }
+        map.set(k, g)
+      }
+      g.events.add(eventKey(l))
+      g.recipients.add(`${l.recipient_name}||${l.recipient_contact ?? ''}`)
+      g.qty += l.outbound_quantity
+      if (l.recipient_identity) g.identity[l.recipient_identity] = (g.identity[l.recipient_identity] ?? 0) + l.outbound_quantity
+      if (l.recipient_district) g.town[l.recipient_district] = (g.town[l.recipient_district] ?? 0) + l.outbound_quantity
+    }
+    const groupsByDate = [...map.values()].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.qty - a.qty))
+    for (const g of groupsByDate) {
+      rows1.push([
+        g.date,
+        g.item,
+        g.events.size,
+        g.identity[RecipientIdentities.LowIncome] ?? 0,
+        g.identity[RecipientIdentities.MidLowIncome] ?? 0,
+        g.identity[RecipientIdentities.General] ?? 0,
+        g.recipients.size,
+        ...townships.map((t) => g.town[t] ?? 0),
+        g.qty,
+      ])
+    }
+    // --- 工作表2：操作人員-社工 ---
+    const head2 = ['操作人員', '領取日期', '使用人', '身分別', '物資品項', '數量']
+    const rows2: (string | number)[][] = [head2]
+    const detail = [...filteredLogs].sort((a, b) => (a.outbound_time < b.outbound_time ? 1 : -1))
+    for (const l of detail) {
+      rows2.push([
+        l.operator ?? '',
+        dateStr(l.outbound_time),
+        l.recipient_name || '（未填）',
+        recipientIdentityDisplayName(l.recipient_identity),
+        itemNameOf(l.supply_item_id),
+        l.outbound_quantity,
+      ])
+    }
+    exportSheetsToExcel('領取分析', [
+      { name: '總分析', rows: rows1 },
+      { name: '操作人員-社工', rows: rows2 },
+    ])
   }
 
   return (
@@ -257,8 +357,11 @@ export function RecipientAnalysis() {
           <i className="bi bi-graph-up" /> 領取分析
         </h2>
         <div className="d-flex gap-2">
-          <button className="btn btn-outline-success" onClick={handleExport} disabled={groups.length === 0}>
-            <i className="bi bi-file-earmark-excel" /> 匯出 Excel
+          <button className="btn btn-outline-success" onClick={handleExportByUser} disabled={filteredLogs.length === 0}>
+            <i className="bi bi-file-earmark-excel" /> 匯出_使用人
+          </button>
+          <button className="btn btn-outline-success" onClick={handleExportSummary} disabled={filteredLogs.length === 0}>
+            <i className="bi bi-file-earmark-excel" /> 匯出_總分析
           </button>
           <button
             className="btn btn-primary"
