@@ -11,6 +11,9 @@ import { DateRangeFilter } from '../components/DateRangeFilter'
 import { exportToExcel } from '../lib/excelExport'
 import { logActivity } from '../lib/activityLog'
 import { statusColorMap } from '../lib/statusColors'
+import { useAuth } from '../hooks/useAuth'
+import { Roles } from '../lib/enums'
+import { RaiseRequestModal, type RaiseTarget } from '../components/RaiseRequestModal'
 import type { SupplyItem, SupplyLocation, SupplyStockInLog } from '../types/db'
 
 export function SupplyDonationIndex() {
@@ -32,12 +35,18 @@ export function SupplyDonationIndex() {
   const [editForm, setEditForm] = useState({ donorName: '', donorContact: '', donorAddress: '', remark: '' })
   const [saving, setSaving] = useState(false)
 
+  // 舉手調貨（對總量不足品項提出缺料需求）
+  const { profile } = useAuth()
+  const [raiseTarget, setRaiseTarget] = useState<RaiseTarget | null>(null)
+  // 舉手權限：總管與幫主可用，小幫手無（與權限設計一致）。
+  const canRaise = profile?.role_name === Roles.Admin || profile?.role_name === Roles.Cadre
+
   async function load() {
     setLoading(true)
     const [logRes, locRes, itemRes, glowRes] = await Promise.all([
       supabase.from('supply_stock_in_log').select('*').order('stock_in_time', { ascending: false }).limit(300),
       supabase.from('supply_location').select('*'),
-      supabase.from('supply_item').select('id, item_name, specification, unit'),
+      supabase.from('supply_item').select('id, item_name, category, specification, unit, quantity, location_id'),
       supabase.from('global_low_stock_view').select('category, item_name, specification, unit, total_quantity, global_threshold'),
     ])
     if (logRes.error) setError(logRes.error.message)
@@ -282,6 +291,7 @@ export function SupplyDonationIndex() {
                         <th className="text-end">現有</th>
                         <th className="text-end">門檻</th>
                         <th className="text-end">觸發點</th>
+                        {canRaise && <th className="text-center">舉手</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -291,6 +301,27 @@ export function SupplyDonationIndex() {
                           <td className="text-end text-danger fw-semibold">{g.total_quantity}</td>
                           <td className="text-end">{g.global_threshold}</td>
                           <td className="text-end">{Math.floor(g.global_threshold * 0.9)}</td>
+                          {canRaise && (
+                            <td className="text-center">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-primary"
+                                title="向有庫存的據點調貨"
+                                onClick={() =>
+                                  setRaiseTarget({
+                                    category: g.category,
+                                    item_name: g.item_name,
+                                    specification: g.specification,
+                                    unit: g.unit,
+                                    locationId: null,
+                                    quantity: g.total_quantity,
+                                  })
+                                }
+                              >
+                                <i className="bi bi-hand-index-thumb" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -343,6 +374,20 @@ export function SupplyDonationIndex() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 舉手：向有庫存的據點調貨（共用元件） */}
+      {raiseTarget && (
+        <RaiseRequestModal
+          target={raiseTarget}
+          locations={locations}
+          items={items}
+          onClose={() => setRaiseTarget(null)}
+          onDone={(flash) => {
+            setRaiseTarget(null)
+            alert(flash)
+          }}
+        />
       )}
     </div>
   )

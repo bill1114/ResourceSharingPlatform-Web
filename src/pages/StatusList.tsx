@@ -1,7 +1,7 @@
 // 物資總覽色塊點擊後跳來的「狀態清單」頁（分工單 p.2 跳頁 + p.4 共用版面 + p.5/6/7 舉手）。
 // 舉手邏輯（依需求修正）：需求方＝「我的據點」（自動、不用選），要選的是「哪個據點有貨」——
 // 來源下拉只列出實際有此品項庫存的其他據點並顯示現有數量。來源據點之後透過物資轉移補貨。
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
@@ -13,6 +13,7 @@ import { stockTypeDisplayName, stockTypeBadgeClass, Roles } from '../lib/enums'
 import { logActivity } from '../lib/activityLog'
 import { EXPIRY_WARNING_DAYS } from '../lib/stockBatch'
 import { FlashMessage } from '../components/FlashMessage'
+import { RaiseRequestModal } from '../components/RaiseRequestModal'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
 interface Row {
@@ -56,14 +57,8 @@ export function StatusList() {
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // 舉手彈窗
+  // 舉手彈窗（表單邏輯已抽到 components/RaiseRequestModal）
   const [raiseRow, setRaiseRow] = useState<Row | null>(null)
-  const [srcLocationId, setSrcLocationId] = useState('')
-  const [reqLocationId, setReqLocationId] = useState('') // 只有無法自動判斷時（管理員／總量不足）才需手選
-  const [reqQuantity, setReqQuantity] = useState('1')
-  const [reqNote, setReqNote] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -144,82 +139,17 @@ export function StatusList() {
     return rows.filter((r) => `${r.category} ${r.item_name} ${r.specification ?? ''}`.toLowerCase().includes(k))
   }, [rows, keyword])
 
-  // 需求方＝登入帳號的據點（固定，不隨品項變）。管理員無據點時才需手選。
-  const myLocId: number | null = profile?.location_id ?? null
   const isAdmin = profile?.role_name === Roles.Admin
   const isCadre = profile?.role_name === Roles.Cadre
   // 舉手／申請報廢是「送需求給總管審核」的請求功能（非直接動別據點庫存），
   // 依權限設計：總管與幫主可用，小幫手無。看得到全部據點，但直接操作（如物資
   // 明細「調整」）另在各頁鎖自己據點。
   const isAdminOrCadre = isAdmin || isCadre
-  // 來源＝物資所在的據點（這列的據點，自動帶入）；總量不足（無所在據點）才需挑選。
-  const isGlobalRow = raiseRow != null && raiseRow.locationId == null
-  // 物資就在自己據點時無需向自己求援。
-  const sameLocation = raiseRow != null && raiseRow.locationId != null && raiseRow.locationId === myLocId
-
-  // 總量不足時：可挑「有此品項庫存」的其他據點（顯示現有數量）。
-  const sourceOptions = useMemo(() => {
-    if (!raiseRow) return [] as { locId: number; qty: number }[]
-    const byLoc = new Map<number, number>()
-    for (const it of items) {
-      if (
-        it.category === raiseRow.category &&
-        it.item_name === raiseRow.item_name &&
-        (it.specification ?? '') === (raiseRow.specification ?? '') &&
-        it.quantity > 0 &&
-        it.location_id !== myLocId
-      ) {
-        byLoc.set(it.location_id, (byLoc.get(it.location_id) ?? 0) + it.quantity)
-      }
-    }
-    return [...byLoc.entries()].map(([locId, qty]) => ({ locId, qty })).sort((a, b) => b.qty - a.qty)
-  }, [raiseRow, items, myLocId])
-
-  function openRaise(row: Row) {
-    setRaiseRow(row)
-    setSrcLocationId('')
-    setReqLocationId(profile?.location_id ? String(profile.location_id) : '')
-    setReqQuantity('1')
-    setReqNote('')
-    setError(null)
-  }
-
-  async function submitRaise(e: FormEvent) {
-    e.preventDefault()
-    if (!raiseRow) return
-    setError(null)
-    const reqLoc = myLocId ?? (reqLocationId ? Number(reqLocationId) : null)
-    const srcLoc = isGlobalRow ? (srcLocationId ? Number(srcLocationId) : null) : raiseRow.locationId
-    if (!reqLoc) return setError('無法判斷你的據點，請先選擇')
-    if (!srcLoc) return setError('請選擇來源據點')
-    if (reqLoc === srcLoc) return setError('此物資就在你的據點，無需向自己調貨')
-    const qty = Number(reqQuantity)
-    if (!Number.isInteger(qty) || qty <= 0) return setError('數量必須是大於 0 的整數')
-
-    setSaving(true)
-    const { error: insErr } = await supabase.from('supply_request').insert({
-      category: raiseRow.category,
-      item_name: raiseRow.item_name,
-      specification: raiseRow.specification,
-      requesting_location_id: reqLoc,
-      source_location_id: srcLoc,
-      quantity: qty,
-      requested_by: profile?.display_name ?? profile?.username ?? null,
-      note: reqNote.trim() || null,
-      status: 'Open',
-    })
-    setSaving(false)
-    if (insErr) return setError(insErr.message)
-    void logActivity({ action: 'request_raise', category: '申請', targetTable: 'supply_request', locationId: reqLoc, summary: `舉手缺料「${raiseRow.item_name}」${qty} ${raiseRow.unit ?? ''}`, detail: { source_location_id: srcLoc, quantity: qty } })
-    setRaiseRow(null)
-    navigate('/', { state: { flash: `已提出需求：${raiseRow.item_name} ${qty} ${raiseRow.unit ?? ''}` } })
-  }
 
   // 幫主對已過期的「向總管申請報廢」：沿用舉手（supply_request），type=disposal，指定批次。
   async function requestDisposal(row: Row) {
     if (row.id == null || row.locationId == null) return
     if (!confirm(`向總管申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）？`)) return
-    setError(null)
     const { error: insErr } = await supabase.from('supply_request').insert({
       request_type: 'disposal',
       supply_item_id: row.id,
@@ -233,7 +163,7 @@ export function StatusList() {
       status: 'Open',
     })
     if (insErr) {
-      setError(insErr.message)
+      alert(insErr.message)
       return
     }
     void logActivity({ action: 'request_disposal', category: '申請', targetTable: 'supply_request', targetId: row.id, locationId: row.locationId, summary: `申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）` })
@@ -317,7 +247,7 @@ export function StatusList() {
                             <span className="text-muted small">—</span>
                           )
                         ) : isAdminOrCadre ? (
-                          <button className="btn btn-sm btn-primary" onClick={() => openRaise(r)}>
+                          <button className="btn btn-sm btn-primary" onClick={() => setRaiseRow(r)}>
                             <i className="bi bi-hand-index-thumb" /> 舉手
                           </button>
                         ) : (
@@ -334,91 +264,25 @@ export function StatusList() {
         </div>
       </div>
 
-      {/* 舉手：提出缺料需求 */}
+      {/* 舉手：提出缺料需求（表單在共用元件） */}
       {raiseRow && (
-        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <form onSubmit={submitRaise}>
-                <div className="modal-header">
-                  <h5 className="modal-title">
-                    <i className="bi bi-hand-index-thumb" /> 提出缺料需求
-                  </h5>
-                  <button type="button" className="btn-close" onClick={() => setRaiseRow(null)} />
-                </div>
-                <div className="modal-body">
-                  {error && <div className="alert alert-danger">{error}</div>}
-                  <div className="alert alert-light border small mb-3">
-                    品項：<strong>{raiseRow.item_name}</strong>
-                    {raiseRow.specification ? `／${raiseRow.specification}` : ''}（{raiseRow.category}）
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label">需求據點（你的據點）</label>
-                    {myLocId != null ? (
-                      <input className="form-control" disabled value={locationName(myLocId)} />
-                    ) : (
-                      <select className="form-select" required value={reqLocationId} onChange={(e) => setReqLocationId(e.target.value)}>
-                        <option value="">請選擇你的據點</option>
-                        {locations.map((l) => (
-                          <option key={l.id} value={l.id}>
-                            {l.location_name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label">來源（物資所在）據點 *</label>
-                    {isGlobalRow ? (
-                      <>
-                        <select className="form-select" required value={srcLocationId} onChange={(e) => setSrcLocationId(e.target.value)}>
-                          <option value="">請選擇有庫存的據點</option>
-                          {sourceOptions.map((s) => (
-                            <option key={s.locId} value={s.locId}>
-                              {locationName(s.locId)}（現有 {s.qty} {raiseRow.unit ?? ''}）
-                            </option>
-                          ))}
-                        </select>
-                        {sourceOptions.length === 0 && <div className="form-text text-danger">目前其他據點都沒有此品項的庫存。</div>}
-                      </>
-                    ) : (
-                      <input
-                        className="form-control"
-                        disabled
-                        value={`${locationName(raiseRow.locationId)}（現有 ${raiseRow.quantity ?? '?'} ${raiseRow.unit ?? ''}）`}
-                      />
-                    )}
-                  </div>
-
-                  {sameLocation && <div className="alert alert-warning py-2 small mb-3">此物資就在你的據點，無需向自己調貨。</div>}
-
-                  <div className="mb-3">
-                    <label className="form-label">需求數量 *</label>
-                    <input className="form-control" type="number" min={1} required value={reqQuantity} onChange={(e) => setReqQuantity(e.target.value)} />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">備註</label>
-                    <textarea className="form-control" rows={2} value={reqNote} onChange={(e) => setReqNote(e.target.value)} />
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setRaiseRow(null)}>
-                    取消
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={saving || sameLocation || (isGlobalRow && sourceOptions.length === 0)}
-                  >
-                    {saving ? '送出中…' : '送出需求'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        <RaiseRequestModal
+          target={{
+            category: raiseRow.category,
+            item_name: raiseRow.item_name,
+            specification: raiseRow.specification,
+            unit: raiseRow.unit,
+            locationId: raiseRow.locationId,
+            quantity: raiseRow.quantity,
+          }}
+          locations={locations}
+          items={items}
+          onClose={() => setRaiseRow(null)}
+          onDone={(flash) => {
+            setRaiseRow(null)
+            navigate('/', { state: { flash } })
+          }}
+        />
       )}
     </div>
   )

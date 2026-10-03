@@ -181,10 +181,13 @@ export function Dashboard() {
               // 已過期：總管全域；幫主/小幫手只計自己據點。
               expired: isAdmin ? expiredCount : (mySummary?.expiredCount ?? 0),
             }
+            // 總量不足：總管導到「捐贈紀錄」（可募資＋舉手，Admin 專屬頁）；
+            // 幫主沒有捐贈紀錄權限，仍導到狀態清單頁（那裡一樣能舉手）。
+            const to = key === 'globalLowStock' && isAdmin ? '/donations' : `/status/${key}`
             return (
               <div className="col-md-3" key={key}>
-                {/* p.2：色塊本身可點擊，跳到該狀態清單頁 */}
-                <Link to={`/status/${key}`} className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle(key)}>
+                {/* p.2：色塊本身可點擊，跳到對應頁 */}
+                <Link to={to} className="card shadow-sm border-0 h-100 text-decoration-none" style={statusCardStyle(key)}>
                   <div className="card-body">
                     <h6>
                       <i className={`bi ${c.icon}`} /> {c.label}

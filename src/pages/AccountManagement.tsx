@@ -13,6 +13,7 @@ export function AccountManagement() {
   const [bindings, setBindings] = useState<LineBinding[]>([])
   const [form, setForm] = useState<Form>(emptyForm), [keyword, setKeyword] = useState(''), [roleFilter, setRoleFilter] = useState<Role|''>(''), [locationFilter, setLocationFilter] = useState(''), [statusFilter, setStatusFilter] = useState<''|'active'|'inactive'>(''), [message, setMessage] = useState<{ok:boolean;text:string}|null>(null), [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   // 綁定碼只有 30 秒，不倒數的話管理員根本不知道還剩多久。issuedAt 記下來是為了
   // 算進度條的比例 —— 直接用回傳的 expiresAt 推，Edge Function 之後改秒數也不用動這裡。
   const [bindCode, setBindCode] = useState<{code:string;expiresAt:string;issuedAt:number;username:string}|null>(null)
@@ -38,8 +39,8 @@ export function AccountManagement() {
   ), [profiles, keyword, roleFilter, locationFilter, statusFilter])
   function resetFilters(){setKeyword('');setRoleFilter('');setLocationFilter('');setStatusFilter('')}
   async function submit(e: FormEvent) { e.preventDefault(); setSaving(true); setMessage(null); const isUpdate = !!form.id; const { data, error } = await supabase.functions.invoke('account-admin', { body: { action: form.id ? 'update' : 'create', ...form } }); setSaving(false); if (error || !data?.success) setMessage({ok:false,text:data?.message ?? error?.message ?? '儲存失敗'}); else { void logActivity({ action: isUpdate ? 'account_update' : 'account_create', category: '資料維護', targetTable: 'profiles', targetId: form.id || null, summary: `${isUpdate ? '修改' : '新增'}帳號「${form.username}」（${roleDisplayName(form.roleName)}）` }); setMessage({ok:true,text:data.message}); setForm(emptyForm); setShowForm(false); await load() } }
-  function openCreate() { setForm(emptyForm); setShowForm(true) }
-  function edit(x: Profile) { setForm({ id:x.id, username:x.username, displayName:x.display_name ?? '', password:'', roleName:x.role_name, locationId:x.location_id, isActive:x.is_active }); setShowForm(true) }
+  function openCreate() { setForm(emptyForm); setShowPassword(false); setShowForm(true) }
+  function edit(x: Profile) { setForm({ id:x.id, username:x.username, displayName:x.display_name ?? '', password:'', roleName:x.role_name, locationId:x.location_id, isActive:x.is_active }); setShowPassword(false); setShowForm(true) }
   async function deactivate(x: Profile) { if(!confirm(`確定停用帳號「${x.username}」嗎？停用後該帳號將無法登入。`))return; setSaving(true); setMessage(null); const{data,error}=await supabase.functions.invoke('account-admin',{body:{action:'update',id:x.id,username:x.username,displayName:x.display_name??'',password:'',roleName:x.role_name,locationId:x.location_id,isActive:false}}); setSaving(false); setMessage({ok:!!data?.success,text:data?.message??error?.message??'停用失敗'}); if(data?.success){void logActivity({action:'account_deactivate',category:'資料維護',targetTable:'profiles',targetId:x.id,summary:`停用帳號「${x.username}」`});await load()} }
   async function lineAction(action:'createBindCode'|'unbind',id:string){setSaving(true);const{data,error}=await supabase.functions.invoke('account-admin',{body:{action,id}});setSaving(false)
     // 產生綁定碼成功時不重複顯示一般訊息 —— 底下有專屬的倒數卡片，訊息會變成兩份。
@@ -85,7 +86,7 @@ export function AccountManagement() {
       <div className="modal-body"><div className="row g-3">
       <div className="col-md-6"><label className="form-label">帳號 *</label><input className="form-control" required disabled={!!form.id} value={form.username} onChange={(e)=>setForm({...form,username:e.target.value})}/></div>
       <div className="col-md-6"><label className="form-label">顯示名稱</label><input className="form-control" value={form.displayName} onChange={(e)=>setForm({...form,displayName:e.target.value})}/></div>
-      <div className="col-md-6"><label className="form-label">{form.id?'新密碼（留空不變）':'密碼 *'}</label><input type="password" className="form-control" required={!form.id} minLength={6} value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/></div>
+      <div className="col-md-6"><label className="form-label">{form.id?'新密碼（留空不變）':'密碼 *'}</label><div className="input-group"><input type={showPassword?'text':'password'} className="form-control" required={!form.id} minLength={6} value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/><button type="button" className="btn btn-outline-secondary" tabIndex={-1} onClick={()=>setShowPassword(v=>!v)} title={showPassword?'隱藏密碼':'顯示密碼'}><i className={`bi ${showPassword?'bi-eye-slash':'bi-eye'}`}/></button></div></div>
       <div className="col-md-6"><label className="form-label">角色 *</label><select className="form-select" value={form.roleName} onChange={(e)=>setForm({...form,roleName:e.target.value as Role})}>{AllRoles.map(x=><option key={x} value={x}>{roleDisplayName(x)}</option>)}</select></div>
       <div className="col-md-6"><label className="form-label">所屬據點</label><select className="form-select" value={form.locationId ?? ''} onChange={(e)=>setForm({...form,locationId:e.target.value?Number(e.target.value):null})}><option value="">未指定</option>{locations.map(x=><option key={x.id} value={x.id}>{x.location_name}</option>)}</select></div>
       <div className="col-md-6 d-flex align-items-end"><div className="form-check form-switch mb-2"><input className="form-check-input" type="checkbox" checked={form.isActive} onChange={(e)=>setForm({...form,isActive:e.target.checked})}/><label className="form-check-label">啟用</label></div></div>
