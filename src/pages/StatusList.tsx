@@ -239,7 +239,7 @@ export function StatusList() {
                             <Link className="btn btn-sm btn-dark" to={`/disposals/create?supplyItemId=${r.id}`}>
                               <i className="bi bi-trash3" /> 報廢
                             </Link>
-                          ) : isCadre && r.id != null && r.locationId === myLocId ? (
+                          ) : isCadre && r.id != null && r.locationId === profile?.location_id ? (
                             <button className="btn btn-sm btn-primary" onClick={() => void requestDisposal(r)}>
                               <i className="bi bi-hand-index-thumb" /> 舉手
                             </button>
