@@ -208,6 +208,14 @@ export function AppShell() {
                 )}
               </ul>
               <ul className="navbar-nav">
+                {/* 快速查看自己所屬據點的物資（有所屬據點者才顯示，通常是幫主／小幫手）。 */}
+                {profile?.location_id != null && (
+                  <li className="nav-item d-flex align-items-center me-3">
+                    <NavLink className="btn btn-sm btn-outline-light" to={`/supply-items?locationId=${profile.location_id}`}>
+                      <i className="bi bi-geo-alt" /> 我的據點
+                    </NavLink>
+                  </li>
+                )}
                 <li className="nav-item d-flex align-items-center text-white me-3">
                   <i className="bi bi-person-circle" />
                   <span className="ms-1">{profile?.display_name ?? profile?.username}</span>

@@ -402,14 +402,19 @@ export function SupplyOutboundCreate() {
                           ) : (
                             r.lines.map((l) => {
                               const alert = expiryAlert(l.item)
-                              const over = l.quantity > l.item.quantity
+                              // 這位使用人看到的庫存＝原始庫存扣掉「排在前面的使用人」已領的同批次數量，
+                              // 讓第二位之後看到的是前面領完後的剩餘量。
+                              const stockHere =
+                                l.item.quantity -
+                                recipients.slice(0, ri).reduce((s, rr) => s + (rr.lines.find((x) => x.item.id === l.item.id)?.quantity ?? 0), 0)
+                              const over = l.quantity > stockHere
                               return (
                                 <tr key={l.item.id}>
                                   <td><strong>{l.item.item_name}</strong><div className="text-muted small">{l.item.category}</div></td>
-                                  <td className="col-min">{l.item.specification?.trim() || '無'}{alert && <span className={`badge ms-1 ${alert.badgeClass}`}>{alert.label}</span>}</td>
-                                  <td className="col-min">{l.item.quantity} {l.item.unit ?? ''}</td>
+                                  <td className="col-min text-nowrap">{l.item.specification?.trim() || '無'}{alert && <span className={`badge ms-1 ${alert.badgeClass}`}>{alert.label}</span>}</td>
+                                  <td className="col-min text-nowrap">{stockHere} {l.item.unit ?? ''}</td>
                                   <td className="col-min">
-                                    <input className={`form-control form-control-sm ${over ? 'is-invalid' : ''}`} type="number" min={1} max={l.item.quantity} value={l.quantity} onChange={(e) => updateLineQty(r.key, l.item.id, e.target.value)} />
+                                    <input className={`form-control form-control-sm ${over ? 'is-invalid' : ''}`} type="number" min={1} max={stockHere} value={l.quantity} onChange={(e) => updateLineQty(r.key, l.item.id, e.target.value)} />
                                   </td>
                                   <td className="col-min text-end"><button type="button" className="btn btn-sm btn-outline-danger" title="移除" onClick={() => removeLineFrom(r.key, l.item.id)}><i className="bi bi-trash" /></button></td>
                                 </tr>
@@ -418,7 +423,7 @@ export function SupplyOutboundCreate() {
                           )}
                         </tbody>
                         {r.lines.length > 0 && (
-                          <tfoot className="table-light"><tr><td colSpan={3} className="text-end fw-bold">小計</td><td className="fw-bold">{r.lines.length} 項／{rTotalQty} 件</td><td /></tr></tfoot>
+                          <tfoot className="table-light"><tr><td colSpan={5} className="text-end fw-bold text-nowrap">小計：{r.lines.length} 項／{rTotalQty} 件</td></tr></tfoot>
                         )}
                       </table>
                     </div>

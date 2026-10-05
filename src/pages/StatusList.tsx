@@ -107,7 +107,10 @@ export function StatusList() {
     // 已過期：幫主/小幫手只看自己據點的（總管不限）。
     const expiredOwnOnly = profile?.role_name !== Roles.Admin
     const myLoc = profile?.location_id ?? null
+    // 小幫手：所有狀態清單一律只看自己據點。
+    const isSocialWorker = profile?.role_name === Roles.SocialWorker
     const picked = items.filter((it) => {
+      if (isSocialWorker && it.location_id !== myLoc) return false
       if (status === 'locationLowStock') return isItemLowStock(it, lowStock)
       if (status === 'expiringSoon') return it.expiration_date != null && it.expiration_date >= today && it.expiration_date <= in30
       if (status === 'expired') {

@@ -596,7 +596,7 @@ export function SupplyItems() {
                             {/* 舉手：幫主看別據點物資（唯讀）時，可直接向該據點舉手調貨到自己據點。 */}
                             {isCadre && item.location_id !== myLocId && (
                               <button
-                                className="btn btn-success"
+                                className="btn btn-primary"
                                 title="向此據點舉手調貨"
                                 onClick={() =>
                                   setRaiseTarget({

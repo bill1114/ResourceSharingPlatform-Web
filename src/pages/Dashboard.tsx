@@ -176,9 +176,10 @@ export function Dashboard() {
           .map((key) => {
             const c = statusColorMap[key]
             const count: Record<DashboardStatusKey, number> = {
-              locationLowStock: lowStockItemCount,
+              // 小幫手：四格一律只計自己據點；其餘角色維持全域彙總。
+              locationLowStock: isSocialWorker ? (mySummary?.lowStockCount ?? 0) : lowStockItemCount,
               globalLowStock: globalLowStockCount,
-              expiringSoon: expiringSoonCount,
+              expiringSoon: isSocialWorker ? (mySummary?.expiringSoonCount ?? 0) : expiringSoonCount,
               // 已過期：總管全域；幫主/小幫手只計自己據點。
               expired: isAdmin ? expiredCount : (mySummary?.expiredCount ?? 0),
             }

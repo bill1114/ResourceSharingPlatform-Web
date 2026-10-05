@@ -242,32 +242,33 @@ export function RecipientAnalysis() {
   function handleExportByUser() {
     const header = ['每次領用日期', '使用人', '領取次數', '領取件數', '物資品項', '數量', '領用人/社工']
     const rows: (string | number)[][] = [header]
+    // 依「使用人 + 日期」分組：不同日期各自一列區塊，才看得出誰在哪一天領了什麼。
     const map = new Map<
       string,
-      { name: string; dates: Set<string>; events: Set<string>; operators: Set<string>; total: number; items: Map<string, number> }
+      { name: string; date: string; events: Set<string>; operators: Set<string>; total: number; items: Map<string, number> }
     >()
     for (const l of filteredLogs) {
-      const k = `${l.recipient_name}||${l.recipient_contact ?? ''}`
+      const date = dateStr(l.outbound_time)
+      const k = `${l.recipient_name}||${l.recipient_contact ?? ''}||${date}`
       let g = map.get(k)
       if (!g) {
-        g = { name: l.recipient_name || '（未填）', dates: new Set(), events: new Set(), operators: new Set(), total: 0, items: new Map() }
+        g = { name: l.recipient_name || '（未填）', date, events: new Set(), operators: new Set(), total: 0, items: new Map() }
         map.set(k, g)
       }
-      g.dates.add(dateStr(l.outbound_time))
       g.events.add(eventKey(l))
       if (l.operator) g.operators.add(l.operator)
       g.total += l.outbound_quantity
       const item = itemNameOf(l.supply_item_id)
       g.items.set(item, (g.items.get(item) ?? 0) + l.outbound_quantity)
     }
-    const sorted = [...map.values()].sort((a, b) => b.total - a.total)
+    // 同一位使用人的多個日期相鄰排列：先依姓名、再依日期。
+    const sorted = [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant') || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
     for (const g of sorted) {
       const items = [...g.items.entries()].sort((a, b) => b[1] - a[1])
-      const dates = [...g.dates].sort().join('、')
       const ops = [...g.operators].join('、')
       items.forEach(([item, qty], i) => {
         rows.push([
-          i === 0 ? dates : '',
+          i === 0 ? g.date : '',
           i === 0 ? g.name : '',
           i === 0 ? g.events.size : '',
           i === 0 ? g.total : '',
@@ -276,7 +277,7 @@ export function RecipientAnalysis() {
           i === 0 ? ops : '',
         ])
       })
-      if (items.length === 0) rows.push([dates, g.name, g.events.size, g.total, '', '', ops])
+      if (items.length === 0) rows.push([g.date, g.name, g.events.size, g.total, '', '', ops])
     }
     exportSheetsToExcel('領取分析_使用人', [{ name: '領取分析', rows }])
   }
