@@ -20,6 +20,7 @@ import { ActivityLog } from './pages/ActivityLog'
 import { AnalyticsHub } from './pages/AnalyticsHub'
 import { AccountManagement } from './pages/AccountManagement'
 import { LineSettings, AISettings } from './pages/AdminSettings'
+import { LineBroadcast } from './pages/LineBroadcast'
 import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
 import { EngineeringRoute } from './components/EngineeringRoute'
 import { MobileFeatures, MobileInventory, MobilePickup, MobileTransfer, MobileVision, MobileNoAccess } from './pages/MobileFeatures'
@@ -143,6 +144,14 @@ function App() {
           element={
             <RoleGate roles={[Roles.Admin]}>
               <LineSettings />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="/admin/line-broadcast"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <LineBroadcast />
             </RoleGate>
           }
         />

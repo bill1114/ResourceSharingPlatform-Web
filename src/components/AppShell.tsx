@@ -192,6 +192,11 @@ export function AppShell() {
                         </NavLink>
                       </li>
                       <li>
+                        <NavLink className="dropdown-item" to="/admin/line-broadcast">
+                          <i className="bi bi-megaphone" /> LINE 物資通報
+                        </NavLink>
+                      </li>
+                      <li>
                         <NavLink className="dropdown-item" to="/admin/ai-settings">
                           <i className="bi bi-stars" /> AI 智慧入庫設定
                         </NavLink>
