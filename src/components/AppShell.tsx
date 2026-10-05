@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabaseClient'
+import { locationColorStyle } from '../lib/colors'
 import { Roles, roleDisplayName } from '../lib/enums'
 import { useEngineeringMode } from '../hooks/useEngineeringMode'
 import { APP_VERSION } from '../lib/version'
@@ -227,12 +228,12 @@ export function AppShell() {
                 )}
               </ul>
               <ul className="navbar-nav">
-                {/* 顯示這隻帳號所屬據點（純顯示，有所屬據點者才出現，通常是幫主／小幫手）。 */}
-                {myLocationName && (
-                  <li className="nav-item d-flex align-items-center text-white me-3">
-                    <i className="bi bi-geo-alt" />
-                    <span className="ms-1">我的據點：</span>
-                    <span className="badge bg-light text-dark ms-1">{myLocationName}</span>
+                {/* 顯示這隻帳號所屬據點（純顯示＋對應色塊，通常是幫主／小幫手）。 */}
+                {myLocationName && profile?.location_id != null && (
+                  <li className="nav-item d-flex align-items-center me-3">
+                    <span className="badge" style={locationColorStyle(profile.location_id)}>
+                      <i className="bi bi-geo-alt" /> {myLocationName}
+                    </span>
                   </li>
                 )}
                 <li className="nav-item d-flex align-items-center text-white me-3">

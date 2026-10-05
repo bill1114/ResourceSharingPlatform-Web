@@ -386,14 +386,8 @@ export function SupplyOutboundCreate() {
                       </button>
                     </div>
                     <div className="table-responsive border rounded">
+                      {/* table-layout:fixed 且不指定欄寬 → 每欄平均分配（5 欄各 20%）。 */}
                       <table className="table table-hover align-middle mb-0" style={{ tableLayout: 'fixed' }}>
-                        <colgroup>
-                          <col style={{ width: '34%' }} />
-                          <col style={{ width: '26%' }} />
-                          <col style={{ width: '14%' }} />
-                          <col style={{ width: '18%' }} />
-                          <col style={{ width: '8%' }} />
-                        </colgroup>
                         <thead className="table-light">
                           <tr>
                             <th>物資</th>
