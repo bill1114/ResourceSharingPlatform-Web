@@ -12,6 +12,7 @@ import { logActivity } from '../lib/activityLog'
 import { AllStockTypes, stockTypeDisplayName } from '../lib/enums'
 import { DateRangeFilter } from '../components/DateRangeFilter'
 import { withinRange } from '../lib/dateRange'
+import { itemPhotoUrl } from '../lib/imageUpload'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
 export function LineBroadcast() {
@@ -200,55 +201,6 @@ export function LineBroadcast() {
             </div>
           </div>
 
-          <div className="card shadow-sm">
-            <div className="card-header bg-light d-flex justify-content-between align-items-center">
-              <span><i className="bi bi-list-check" /> 物資清單</span>
-              <span className="text-muted small">已選 {selected.size} 項</span>
-            </div>
-            <div className="table-responsive" style={{ maxHeight: 460, overflowY: 'auto' }}>
-              <table className="table table-sm table-hover align-middle mb-0">
-                <thead className="table-light">
-                  <tr>
-                    <th className="col-min" />
-                    <th>種類</th>
-                    <th>名稱</th>
-                    <th className="col-min text-nowrap">規格</th>
-                    <th className="col-min text-nowrap">現有</th>
-                    <th className="col-min text-nowrap" style={{ width: 120 }}>公布數量</th>
-                    <th className="col-min text-nowrap">效期</th>
-                    <th className="col-min text-nowrap">據點</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={8} className="text-center text-muted py-4">載入中…</td></tr>
-                  ) : filtered.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center text-muted py-4">沒有符合條件的物資</td></tr>
-                  ) : (
-                    filtered.map((i) => {
-                      const checked = selected.has(i.id)
-                      return (
-                        <tr key={i.id} className={checked ? 'table-primary' : ''}>
-                          <td className="col-min"><input type="checkbox" className="form-check-input" checked={checked} onChange={() => toggle(i)} /></td>
-                          <td>{i.category}</td>
-                          <td><strong>{i.item_name}</strong></td>
-                          <td className="col-min text-nowrap">{i.specification?.trim() || '無'}</td>
-                          <td className="col-min text-nowrap">{i.quantity} {i.unit ?? ''}</td>
-                          <td className="col-min">
-                            <input type="number" className="form-control form-control-sm" min={1} max={i.quantity} disabled={!checked}
-                              value={checked ? (selected.get(i.id) ?? i.quantity) : ''}
-                              onChange={(e) => setPublishQty(i.id, Math.max(1, Math.min(i.quantity, Number(e.target.value) || 1)))} />
-                          </td>
-                          <td className="col-min text-nowrap">{i.expiration_date ?? '—'}</td>
-                          <td className="col-min text-nowrap">{locationName(i.location_id)}</td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
 
         {/* 右：預覽 + 推播 */}
@@ -256,7 +208,7 @@ export function LineBroadcast() {
           <div className="card shadow-sm" style={{ position: 'sticky', top: 16 }}>
             <div className="card-header bg-light"><i className="bi bi-eye" /> 推播內容預覽</div>
             <div className="card-body">
-              <pre className="border rounded bg-light p-3 mb-3" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: 160 }}>{composedMessage || '（尚未輸入訊息或選取物資）'}</pre>
+              <pre className="border rounded bg-light p-3 mb-3" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: 220 }}>{composedMessage || '（尚未輸入訊息或選取物資）'}</pre>
               <div className="d-flex gap-2">
                 <button type="button" className="btn btn-outline-secondary" onClick={() => void copyMessage()}>
                   <i className="bi bi-clipboard" /> 複製訊息
@@ -267,6 +219,66 @@ export function LineBroadcast() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 物資清單（整頁寬，填滿畫面） */}
+      <div className="card shadow-sm mt-3">
+        <div className="card-header bg-light d-flex justify-content-between align-items-center">
+          <span><i className="bi bi-list-check" /> 物資清單</span>
+          <span className="text-muted small">已選 {selected.size} 項</span>
+        </div>
+        <div className="table-responsive" style={{ maxHeight: 640, overflowY: 'auto' }}>
+          <table className="table table-hover align-middle mb-0">
+            <thead className="table-light">
+              <tr>
+                <th className="col-min" />
+                <th className="col-min">照片</th>
+                <th>種類</th>
+                <th>名稱</th>
+                <th>規格</th>
+                <th className="col-min text-nowrap">現有</th>
+                <th className="col-min text-nowrap" style={{ width: 130 }}>公布數量</th>
+                <th className="col-min text-nowrap">效期</th>
+                <th>據點</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={9} className="text-center text-muted py-4">載入中…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={9} className="text-center text-muted py-4">沒有符合條件的物資</td></tr>
+              ) : (
+                filtered.map((i) => {
+                  const checked = selected.has(i.id)
+                  const url = itemPhotoUrl(i.image_path)
+                  return (
+                    <tr key={i.id} className={checked ? 'table-primary' : ''}>
+                      <td className="col-min"><input type="checkbox" className="form-check-input" checked={checked} onChange={() => toggle(i)} /></td>
+                      <td className="col-min">
+                        {url ? (
+                          <img src={url} alt={i.item_name} style={{ width: 48, height: 48, objectFit: 'cover' }} className="rounded border" />
+                        ) : (
+                          <i className="bi bi-image text-muted fs-3" />
+                        )}
+                      </td>
+                      <td>{i.category}</td>
+                      <td><strong>{i.item_name}</strong></td>
+                      <td>{i.specification?.trim() || '無'}</td>
+                      <td className="col-min text-nowrap">{i.quantity} {i.unit ?? ''}</td>
+                      <td className="col-min">
+                        <input type="number" className="form-control form-control-sm" min={1} max={i.quantity} disabled={!checked}
+                          value={checked ? (selected.get(i.id) ?? i.quantity) : ''}
+                          onChange={(e) => setPublishQty(i.id, Math.max(1, Math.min(i.quantity, Number(e.target.value) || 1)))} />
+                      </td>
+                      <td className="col-min text-nowrap">{i.expiration_date ?? '—'}</td>
+                      <td>{locationName(i.location_id)}</td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
