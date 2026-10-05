@@ -1,8 +1,10 @@
 // Direct port of Views/Shared/_Layout.cshtml's nav structure. Bootstrap's JS
 // (dropdown toggle) is loaded globally in main.tsx, so the same
 // data-bs-toggle="dropdown" markup works here without a React dropdown library.
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { supabase } from '../lib/supabaseClient'
 import { Roles, roleDisplayName } from '../lib/enums'
 import { useEngineeringMode } from '../hooks/useEngineeringMode'
 import { APP_VERSION } from '../lib/version'
@@ -13,6 +15,18 @@ export function AppShell() {
   const isAdminOrCadre = profile?.role_name === Roles.Admin || profile?.role_name === Roles.Cadre
   const isSocialWorker = profile?.role_name === Roles.SocialWorker
   const { enabled: engineeringMode, setEnabled: setEngineeringMode } = useEngineeringMode()
+
+  // 顯示這隻帳號所屬據點名稱（純顯示，不是連結）。
+  const [myLocationName, setMyLocationName] = useState<string | null>(null)
+  useEffect(() => {
+    if (profile?.location_id == null) { setMyLocationName(null); return }
+    supabase
+      .from('supply_location')
+      .select('location_name')
+      .eq('id', profile.location_id)
+      .maybeSingle()
+      .then(({ data }) => setMyLocationName((data as { location_name: string } | null)?.location_name ?? null))
+  }, [profile?.location_id])
 
   return (
     <>
@@ -213,12 +227,12 @@ export function AppShell() {
                 )}
               </ul>
               <ul className="navbar-nav">
-                {/* 快速查看自己所屬據點的物資（有所屬據點者才顯示，通常是幫主／小幫手）。 */}
-                {profile?.location_id != null && (
-                  <li className="nav-item d-flex align-items-center me-3">
-                    <NavLink className="btn btn-sm btn-outline-light" to={`/supply-items?locationId=${profile.location_id}`}>
-                      <i className="bi bi-geo-alt" /> 我的據點
-                    </NavLink>
+                {/* 顯示這隻帳號所屬據點（純顯示，有所屬據點者才出現，通常是幫主／小幫手）。 */}
+                {myLocationName && (
+                  <li className="nav-item d-flex align-items-center text-white me-3">
+                    <i className="bi bi-geo-alt" />
+                    <span className="ms-1">我的據點：</span>
+                    <span className="badge bg-light text-dark ms-1">{myLocationName}</span>
                   </li>
                 )}
                 <li className="nav-item d-flex align-items-center text-white me-3">

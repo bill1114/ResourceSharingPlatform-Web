@@ -386,14 +386,21 @@ export function SupplyOutboundCreate() {
                       </button>
                     </div>
                     <div className="table-responsive border rounded">
-                      <table className="table table-hover align-middle mb-0">
+                      <table className="table table-hover align-middle mb-0" style={{ tableLayout: 'fixed' }}>
+                        <colgroup>
+                          <col style={{ width: '34%' }} />
+                          <col style={{ width: '26%' }} />
+                          <col style={{ width: '14%' }} />
+                          <col style={{ width: '18%' }} />
+                          <col style={{ width: '8%' }} />
+                        </colgroup>
                         <thead className="table-light">
                           <tr>
                             <th>物資</th>
-                            <th className="col-min">規格／批次</th>
-                            <th className="col-min">庫存</th>
-                            <th className="col-min" style={{ width: 130 }}>領用數量</th>
-                            <th className="col-min" />
+                            <th>規格／批次</th>
+                            <th>庫存</th>
+                            <th>領用數量</th>
+                            <th />
                           </tr>
                         </thead>
                         <tbody>
@@ -410,13 +417,13 @@ export function SupplyOutboundCreate() {
                               const over = l.quantity > stockHere
                               return (
                                 <tr key={l.item.id}>
-                                  <td><strong>{l.item.item_name}</strong><div className="text-muted small">{l.item.category}</div></td>
-                                  <td className="col-min text-nowrap">{l.item.specification?.trim() || '無'}{alert && <span className={`badge ms-1 ${alert.badgeClass}`}>{alert.label}</span>}</td>
-                                  <td className="col-min text-nowrap">{stockHere} {l.item.unit ?? ''}</td>
-                                  <td className="col-min">
+                                  <td style={{ wordBreak: 'break-word' }}><strong>{l.item.item_name}</strong><div className="text-muted small">{l.item.category}</div></td>
+                                  <td style={{ wordBreak: 'break-word' }}>{l.item.specification?.trim() || '無'}{alert && <span className={`badge ms-1 ${alert.badgeClass}`}>{alert.label}</span>}</td>
+                                  <td className="text-nowrap">{stockHere} {l.item.unit ?? ''}</td>
+                                  <td>
                                     <input className={`form-control form-control-sm ${over ? 'is-invalid' : ''}`} type="number" min={1} max={stockHere} value={l.quantity} onChange={(e) => updateLineQty(r.key, l.item.id, e.target.value)} />
                                   </td>
-                                  <td className="col-min text-end"><button type="button" className="btn btn-sm btn-outline-danger" title="移除" onClick={() => removeLineFrom(r.key, l.item.id)}><i className="bi bi-trash" /></button></td>
+                                  <td className="text-end"><button type="button" className="btn btn-sm btn-outline-danger" title="移除" onClick={() => removeLineFrom(r.key, l.item.id)}><i className="bi bi-trash" /></button></td>
                                 </tr>
                               )
                             })
