@@ -229,17 +229,28 @@ export function LineBroadcast() {
           <span className="text-muted small">已選 {selected.size} 項</span>
         </div>
         <div className="table-responsive" style={{ maxHeight: 640, overflowY: 'auto' }}>
-          <table className="table table-hover align-middle mb-0">
+          <table className="table table-hover align-middle mb-0" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '4%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '9%' }} />
+            </colgroup>
             <thead className="table-light">
               <tr>
-                <th className="col-min" />
-                <th className="col-min">照片</th>
+                <th />
+                <th>照片</th>
                 <th>種類</th>
                 <th>名稱</th>
                 <th>規格</th>
-                <th className="col-min text-nowrap">現有</th>
-                <th className="col-min text-nowrap" style={{ width: 130 }}>公布數量</th>
-                <th className="col-min text-nowrap">效期</th>
+                <th className="text-nowrap">現有</th>
+                <th className="text-nowrap">公布數量</th>
+                <th className="text-nowrap">效期</th>
                 <th>據點</th>
               </tr>
             </thead>
@@ -254,25 +265,25 @@ export function LineBroadcast() {
                   const url = itemPhotoUrl(i.image_path)
                   return (
                     <tr key={i.id} className={checked ? 'table-primary' : ''}>
-                      <td className="col-min"><input type="checkbox" className="form-check-input" checked={checked} onChange={() => toggle(i)} /></td>
-                      <td className="col-min">
+                      <td><input type="checkbox" className="form-check-input" checked={checked} onChange={() => toggle(i)} /></td>
+                      <td>
                         {url ? (
                           <img src={url} alt={i.item_name} style={{ width: 48, height: 48, objectFit: 'cover' }} className="rounded border" />
                         ) : (
                           <i className="bi bi-image text-muted fs-3" />
                         )}
                       </td>
-                      <td>{i.category}</td>
-                      <td><strong>{i.item_name}</strong></td>
-                      <td>{i.specification?.trim() || '無'}</td>
-                      <td className="col-min text-nowrap">{i.quantity} {i.unit ?? ''}</td>
-                      <td className="col-min">
+                      <td style={{ wordBreak: 'break-word' }}>{i.category}</td>
+                      <td style={{ wordBreak: 'break-word' }}><strong>{i.item_name}</strong></td>
+                      <td style={{ wordBreak: 'break-word' }}>{i.specification?.trim() || '無'}</td>
+                      <td className="text-nowrap">{i.quantity} {i.unit ?? ''}</td>
+                      <td>
                         <input type="number" className="form-control form-control-sm" min={1} max={i.quantity} disabled={!checked}
                           value={checked ? (selected.get(i.id) ?? i.quantity) : ''}
                           onChange={(e) => setPublishQty(i.id, Math.max(1, Math.min(i.quantity, Number(e.target.value) || 1)))} />
                       </td>
-                      <td className="col-min text-nowrap">{i.expiration_date ?? '—'}</td>
-                      <td>{locationName(i.location_id)}</td>
+                      <td className="text-nowrap">{i.expiration_date ?? '—'}</td>
+                      <td style={{ wordBreak: 'break-word' }}>{locationName(i.location_id)}</td>
                     </tr>
                   )
                 })
