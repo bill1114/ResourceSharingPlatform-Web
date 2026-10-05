@@ -59,6 +59,10 @@ export function StatusList() {
 
   // 舉手彈窗（表單邏輯已抽到 components/RaiseRequestModal）
   const [raiseRow, setRaiseRow] = useState<Row | null>(null)
+  // 申請報廢彈窗（填原因）
+  const [disposalRow, setDisposalRow] = useState<Row | null>(null)
+  const [disposalReason, setDisposalReason] = useState('已過期')
+  const [disposalSaving, setDisposalSaving] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -150,15 +154,12 @@ export function StatusList() {
   const isAdminOrCadre = isAdmin || isCadre
 
   // 幫主對已過期的「向總管申請報廢」：沿用舉手（supply_request），type=disposal，指定批次。
-  async function requestDisposal(row: Row) {
-    if (row.id == null || row.locationId == null) return
-    // 請幫主填寫報廢原因，總管在「待處理需求 → 詳細」會看到。
-    const reason = prompt(
-      `向總管申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）。\n請填寫報廢原因（總管審核時會看到）：`,
-      '已過期'
-    )
-    if (reason === null) return // 取消
-    const note = reason.trim() || '已過期，申請報廢'
+  // 原因改用彈窗填寫（與其他操作一致），總管在「待處理需求 → 詳細」會看到。
+  async function submitDisposalRequest() {
+    const row = disposalRow
+    if (!row || row.id == null || row.locationId == null) return
+    setDisposalSaving(true)
+    const note = disposalReason.trim() || '已過期，申請報廢'
     const { error: insErr } = await supabase.from('supply_request').insert({
       request_type: 'disposal',
       supply_item_id: row.id,
@@ -171,11 +172,13 @@ export function StatusList() {
       note,
       status: 'Open',
     })
+    setDisposalSaving(false)
     if (insErr) {
       alert(insErr.message)
       return
     }
     void logActivity({ action: 'request_disposal', category: '申請', targetTable: 'supply_request', targetId: row.id, locationId: row.locationId, summary: `申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）` })
+    setDisposalRow(null)
     navigate('/', { state: { flash: `已向總管申請報廢：${row.item_name}` } })
   }
 
@@ -249,7 +252,7 @@ export function StatusList() {
                               <i className="bi bi-trash3" /> 報廢
                             </Link>
                           ) : isCadre && r.id != null && r.locationId === profile?.location_id ? (
-                            <button className="btn btn-sm btn-primary" onClick={() => void requestDisposal(r)}>
+                            <button className="btn btn-sm btn-primary" onClick={() => { setDisposalRow(r); setDisposalReason('已過期') }}>
                               <i className="bi bi-hand-index-thumb" /> 舉手
                             </button>
                           ) : (
@@ -292,6 +295,36 @@ export function StatusList() {
             navigate('/', { state: { flash } })
           }}
         />
+      )}
+
+      {/* 申請報廢：填寫原因 */}
+      {disposalRow && (
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title"><i className="bi bi-trash3" /> 向總管申請報廢</h5>
+                <button type="button" className="btn-close" onClick={() => setDisposalRow(null)} />
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-light border small mb-3">
+                  品項：<strong>{disposalRow.item_name}</strong>
+                  {disposalRow.specification ? `／${disposalRow.specification}` : ''}（{disposalRow.category}）
+                  ，數量 {disposalRow.quantity ?? ''} {disposalRow.unit ?? ''}（已過期）
+                </div>
+                <label className="form-label">報廢原因 *</label>
+                <textarea className="form-control" rows={3} value={disposalReason} onChange={(e) => setDisposalReason(e.target.value)} placeholder="請填寫報廢原因，總管審核時會看到" />
+                <div className="form-text">送出後會成為一筆待總管審核的報廢申請。</div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setDisposalRow(null)}>取消</button>
+                <button type="button" className="btn btn-primary" disabled={disposalSaving || !disposalReason.trim()} onClick={() => void submitDisposalRequest()}>
+                  {disposalSaving ? '送出中…' : '送出申請'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
