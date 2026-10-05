@@ -72,7 +72,6 @@ export function SupplyOutboundCreate() {
   const [districtModalFor, setDistrictModalFor] = useState<number | null>(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
-  const [remark, setRemark] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -103,6 +102,32 @@ export function SupplyOutboundCreate() {
   }
   function removeRecipient(key: number) {
     setRecipients((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)))
+  }
+  // 建立副本：複製這位的「領用清單」到新的一位（接在其後）。
+  // 個資（姓名／電話／鄉鎮／身分別）一律重填（留空）。
+  // 送出前先確認每一項物資剩餘庫存足以「再領一次」，不足則不建立並提示。
+  function duplicateRecipient(key: number) {
+    const src = recipients.find((r) => r.key === key)
+    if (!src) return
+    if (src.lines.length === 0) {
+      alert('這位的領用清單是空的，沒有可複製的物資。')
+      return
+    }
+    for (const l of src.lines) {
+      const rem = remainingOf(l.item) // 已扣掉所有使用人（含這位）目前分配量後的剩餘可領量
+      if (l.quantity > rem) {
+        alert(`無法建立副本：「${l.item.item_name}」目前剩餘可領 ${rem} ${l.item.unit ?? ''}，不足以再領 ${l.quantity}。請調整數量後再試。`)
+        return
+      }
+    }
+    const copy: RecipientBlock = { ...blankRecipient(), lines: src.lines.map((l) => ({ item: l.item, quantity: l.quantity })) }
+    setRecipients((prev) => {
+      const idx = prev.findIndex((r) => r.key === key)
+      const next = [...prev]
+      next.splice(idx < 0 ? prev.length : idx + 1, 0, copy)
+      return next
+    })
+    setNotice('已建立副本：已複製領用清單，請填寫新使用人的姓名、電話、所屬鄉鎮與身分別。')
   }
 
   // 加物資到某位使用人（同批次自動累加）。
@@ -240,7 +265,7 @@ export function SupplyOutboundCreate() {
           identity: r.identity,
           items: r.lines.map((l) => ({ supplyItemId: l.item.id, quantity: l.quantity })),
         })),
-        remark,
+        remark: '',
       },
     })
     setSubmitting(false)
@@ -307,11 +332,16 @@ export function SupplyOutboundCreate() {
                     <span>
                       <i className="bi bi-person-vcard" /> 使用人 {ri + 1}
                     </span>
-                    {recipients.length > 1 && (
-                      <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeRecipient(r.key)}>
-                        <i className="bi bi-x-lg" /> 移除這位
+                    <div className="d-flex gap-2">
+                      <button type="button" className="btn btn-sm btn-outline-primary" title="複製這位的領用清單到新的一位（姓名／電話／鄉鎮／身分別需重填）" onClick={() => duplicateRecipient(r.key)}>
+                        <i className="bi bi-files" /> 建立副本
                       </button>
-                    )}
+                      {recipients.length > 1 && (
+                        <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeRecipient(r.key)}>
+                          <i className="bi bi-x-lg" /> 移除這位
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="card-body">
                     <div className="row">
@@ -411,10 +441,6 @@ export function SupplyOutboundCreate() {
                   <input className="form-control" disabled value={operatorName} />
                   <div className="form-text">系統會自動記錄目前登入帳號為操作人員。</div>
                 </div>
-                <div className="mb-3">
-                  <label className="form-label">備註</label>
-                  <textarea className="form-control" rows={2} placeholder="發放原因或其他說明（整張單共用）" value={remark} onChange={(e) => setRemark(e.target.value)} />
-                </div>
                 <div className="d-flex gap-2">
                   <button type="submit" className="btn btn-primary btn-lg" disabled={submitting || grandTotalItems === 0}>
                     <i className="bi bi-check-circle" /> 確認領用（{recipients.length} 位／{grandTotalItems} 項）
@@ -478,7 +504,7 @@ export function SupplyOutboundCreate() {
                 <button type="button" className="btn-close" disabled={submitting} onClick={() => setShowConfirmModal(false)} />
               </div>
               <div className="modal-body">
-                <div className="mb-2 small text-muted">發放據點：{locName(effectiveLocationId)}｜操作人員：{operatorName}{remark.trim() ? `｜備註：${remark.trim()}` : ''}</div>
+                <div className="mb-2 small text-muted">發放據點：{locName(effectiveLocationId)}｜操作人員：{operatorName}</div>
                 {recipients.map((r, ri) => (
                   <div className="card border mb-2" key={r.key}>
                     <div className="card-header bg-light py-2">
