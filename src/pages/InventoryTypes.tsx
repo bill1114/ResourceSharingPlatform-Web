@@ -182,9 +182,23 @@ export function InventoryTypes() {
 
   async function handleAddVariant() {
     if (!variantEditorFor) return
+    // 防呆：一定要輸入規格文字才能新增，不再自動帶入「無規格」。
+    const spec = newSpec.trim()
+    if (!spec) {
+      alert('請先輸入規格文字才能新增。')
+      return
+    }
+    // 同一品項下避免重複規格。
+    const dup = variants.some(
+      (v) => v.inventory_item_definition_id === variantEditorFor.id && (v.specification ?? '').trim() === spec
+    )
+    if (dup) {
+      alert(`規格「${spec}」已存在。`)
+      return
+    }
     const { error } = await supabase.from('inventory_item_variant').insert({
       inventory_item_definition_id: variantEditorFor.id,
-      specification: newSpec.trim() || null,
+      specification: spec,
       global_safety_stock: 0,
       global_threshold: 0,
       is_active: true,
@@ -194,6 +208,54 @@ export function InventoryTypes() {
       return
     }
     setNewSpec('')
+    void load()
+  }
+
+  // 編輯規格名稱（修正打錯的文字）。
+  async function handleRenameVariant(variant: InventoryItemVariant) {
+    const next = prompt('修改規格名稱：', variant.specification ?? '')
+    if (next === null) return // 取消
+    const spec = next.trim()
+    if (!spec) {
+      alert('規格名稱不可空白。')
+      return
+    }
+    if (spec === (variant.specification ?? '').trim()) return
+    const dup = variants.some(
+      (v) => v.id !== variant.id && v.inventory_item_definition_id === variant.inventory_item_definition_id && (v.specification ?? '').trim() === spec
+    )
+    if (dup) {
+      alert(`規格「${spec}」已存在。`)
+      return
+    }
+    const { error } = await supabase
+      .from('inventory_item_variant')
+      .update({ specification: spec, updated_at: new Date().toISOString() })
+      .eq('id', variant.id)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    void load()
+  }
+
+  // 刪除規格（給新增錯的用）。若已被物資使用則會有外鍵限制，改提示用停用。
+  async function handleDeleteVariant(variant: InventoryItemVariant) {
+    if (!confirm(`確定刪除規格「${variant.specification ?? '無規格'}」嗎？此動作無法復原。`)) return
+    // 先檢查是否已有物資引用此規格，有的話不可刪除。
+    const { count } = await supabase
+      .from('supply_item')
+      .select('id', { count: 'exact', head: true })
+      .eq('inventory_item_variant_id', variant.id)
+    if ((count ?? 0) > 0) {
+      alert(`此規格已被 ${count} 筆物資使用，無法刪除。請改用「停用」。`)
+      return
+    }
+    const { error } = await supabase.from('inventory_item_variant').delete().eq('id', variant.id)
+    if (error) {
+      alert(`刪除失敗（可能已被物資使用）：${error.message}。請改用「停用」。`)
+      return
+    }
     void load()
   }
 
@@ -639,11 +701,12 @@ export function InventoryTypes() {
                 <div className="input-group mb-3">
                   <input
                     className="form-control"
-                    placeholder="輸入新規格；無規格可留空"
+                    placeholder="輸入新規格（必填）"
                     value={newSpec}
                     onChange={(e) => setNewSpec(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddVariant() } }}
                   />
-                  <button className="btn btn-primary" onClick={() => void handleAddVariant()}>
+                  <button className="btn btn-primary" disabled={!newSpec.trim()} onClick={() => void handleAddVariant()}>
                     <i className="bi bi-plus-circle" /> 新增規格
                   </button>
                 </div>
@@ -663,16 +726,23 @@ export function InventoryTypes() {
                           <td>{v.specification ?? '無規格'}</td>
                           <td>{v.is_active ? '啟用' : '停用'}</td>
                           <td>
-                            {v.is_active && (
-                              <button className="btn btn-sm btn-outline-danger" onClick={() => void handleDisableVariant(v)}>
-                                停用
+                            <div className="d-flex gap-1 flex-wrap">
+                              <button className="btn btn-sm btn-outline-primary" title="編輯規格名稱" onClick={() => void handleRenameVariant(v)}>
+                                編輯
                               </button>
-                            )}
-                            {!v.is_active && (
-                              <button className="btn btn-sm btn-outline-success" onClick={() => void handleEnableVariant(v)}>
-                                啟用
+                              {v.is_active ? (
+                                <button className="btn btn-sm btn-outline-danger" onClick={() => void handleDisableVariant(v)}>
+                                  停用
+                                </button>
+                              ) : (
+                                <button className="btn btn-sm btn-outline-success" onClick={() => void handleEnableVariant(v)}>
+                                  啟用
+                                </button>
+                              )}
+                              <button className="btn btn-sm btn-danger" title="刪除此規格（新增錯誤時用；已被物資使用者無法刪除）" onClick={() => void handleDeleteVariant(v)}>
+                                刪除
                               </button>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       ))}
