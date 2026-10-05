@@ -17,6 +17,7 @@ import { withinRange } from '../lib/dateRange'
 import { fetchLowStock, isItemLowStock, emptyLowStock, type LowStockData } from '../lib/lowStock'
 import { EXPIRY_WARNING_DAYS } from '../lib/stockBatch'
 import { logActivity } from '../lib/activityLog'
+import { RaiseRequestModal, type RaiseTarget } from '../components/RaiseRequestModal'
 import type { SupplyItem, SupplyLocation } from '../types/db'
 
 interface ItemSummaryRow {
@@ -76,6 +77,8 @@ export function SupplyItems() {
   const [editForm, setEditForm] = useState({ quantity: '', expirationDate: '', safetyStock: '', remark: '', variantId: '' })
   const [editPhoto, setEditPhoto] = useState<File | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+  // 舉手調貨：幫主在物資清單看別據點物資時，可直接向該據點舉手（總管可直接操作、不需舉手）。
+  const [raiseTarget, setRaiseTarget] = useState<RaiseTarget | null>(null)
 
   // 這筆物資對應的定義底下、可選的規格（供編輯補規格）。
   function variantsFor(item: SupplyItem) {
@@ -590,6 +593,25 @@ export function SupplyItems() {
                             <button className="btn btn-info" title="詳細資料" onClick={() => setDetailsItem(item)}>
                               <i className="bi bi-eye" />
                             </button>
+                            {/* 舉手：幫主看別據點物資（唯讀）時，可直接向該據點舉手調貨到自己據點。 */}
+                            {isCadre && item.location_id !== myLocId && (
+                              <button
+                                className="btn btn-success"
+                                title="向此據點舉手調貨"
+                                onClick={() =>
+                                  setRaiseTarget({
+                                    category: item.category,
+                                    item_name: item.item_name,
+                                    specification: item.specification,
+                                    unit: item.unit,
+                                    locationId: item.location_id,
+                                    quantity: item.quantity,
+                                  })
+                                }
+                              >
+                                <i className="bi bi-hand-index-thumb" />
+                              </button>
+                            )}
                             {/* 編輯/轉移/刪除：總管不限；幫主限自己據點；小幫手唯讀。 */}
                             {canOperate(item) && (
                               <button className="btn btn-warning" title="編輯" onClick={() => openEdit(item)}>
@@ -792,6 +814,20 @@ export function SupplyItems() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 舉手：向別據點調貨（共用元件） */}
+      {raiseTarget && (
+        <RaiseRequestModal
+          target={raiseTarget}
+          locations={locations}
+          items={items}
+          onClose={() => setRaiseTarget(null)}
+          onDone={(flash) => {
+            setRaiseTarget(null)
+            alert(flash)
+          }}
+        />
       )}
     </div>
   )
