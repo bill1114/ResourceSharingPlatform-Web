@@ -8,7 +8,7 @@ import { attachSharedAiPhoto } from '../lib/imageUpload'
 import { logActivity } from '../lib/activityLog'
 import { DateSelect } from '../components/DateSelect'
 import { FlashMessage } from '../components/FlashMessage'
-import type { AIStockInLog, SupplyLocation } from '../types/db'
+import type { AIStockInLog, SupplyLocation, InventoryItemDefinition, InventoryItemVariant } from '../types/db'
 
 // 每一筆辨識結果（可編輯）；logId 對應各自的 ai_stock_in_log 列。
 type AiItem = {
@@ -55,6 +55,9 @@ export function AIStockInCreate() {
   const isAdmin = profile?.role_name === Roles.Admin
 
   const [locations, setLocations] = useState<SupplyLocation[]>([])
+  // 庫存種類目錄：核對畫面的 種類／名稱／規格／單位 改用下拉選單（與物資入庫一致）。
+  const [definitions, setDefinitions] = useState<InventoryItemDefinition[]>([])
+  const [variants, setVariants] = useState<InventoryItemVariant[]>([])
   const [locationId, setLocationId] = useState<number | null>(profile?.location_id ?? null)
   const [inputText, setInputText] = useState('')
   const [image, setImage] = useState<File | null>(null)
@@ -66,6 +69,8 @@ export function AIStockInCreate() {
 
   useEffect(() => {
     supabase.from('supply_location').select('*').eq('is_active', true).order('id').then(({ data }) => setLocations((data ?? []) as SupplyLocation[]))
+    supabase.from('inventory_item_definition').select('*').eq('is_active', true).then(({ data }) => setDefinitions((data ?? []) as InventoryItemDefinition[]))
+    supabase.from('inventory_item_variant').select('*').eq('is_active', true).then(({ data }) => setVariants((data ?? []) as InventoryItemVariant[]))
     const id = params.get('id')
     if (id) {
       // 從紀錄頁「前往確認」進來：載入單一待確認項目。
@@ -197,6 +202,25 @@ export function AIStockInCreate() {
 
   const locationName = locations.find((x) => x.id === locationId)?.location_name ?? ''
 
+  // 依庫存分類（stockType）推導「物資種類」選項；再依種類推名稱、依名稱推規格與單位。
+  const categoriesByType = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    for (const st of AllStockTypes) {
+      map[st] = Array.from(new Set(definitions.filter((d) => d.stock_type === st).map((d) => d.category))).sort()
+    }
+    return map
+  }, [definitions])
+  function itemNamesFor(stockType: string, category: string): string[] {
+    return Array.from(new Set(definitions.filter((d) => d.stock_type === stockType && d.category === category).map((d) => d.item_name))).sort()
+  }
+  function defForItem(it: AiItem): InventoryItemDefinition | null {
+    return definitions.find((d) => d.stock_type === it.stockType && d.category === it.category && d.item_name === it.itemName) ?? null
+  }
+  function specsForItem(it: AiItem): InventoryItemVariant[] {
+    const def = defForItem(it)
+    return def ? variants.filter((v) => v.inventory_item_definition_id === def.id && v.specification) : []
+  }
+
   return (
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-3">
@@ -300,14 +324,36 @@ export function AIStockInCreate() {
                   </div>
                   <div className="card-body">
                     <div className="row g-3">
-                      <ItemField label="物資種類" value={it.category} onChange={(v) => updateItem(it.logId, { category: v })} />
-                      <ItemField label="物資名稱" value={it.itemName} onChange={(v) => updateItem(it.logId, { itemName: v })} />
-                      <ItemField label="規格" required={false} value={it.specification} onChange={(v) => updateItem(it.logId, { specification: v })} />
+                      <div className="col-md-6">
+                        <label className="form-label">物資種類 *</label>
+                        <select className="form-select" required value={it.category} onChange={(e) => updateItem(it.logId, { category: e.target.value, itemName: '', specification: '', unit: '' })}>
+                          <option value="">請選擇物資種類</option>
+                          {(categoriesByType[it.stockType] ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">物資名稱 *</label>
+                        <select className="form-select" required disabled={!it.category} value={it.itemName} onChange={(e) => { const name = e.target.value; const d = definitions.find((x) => x.stock_type === it.stockType && x.category === it.category && x.item_name === name); updateItem(it.logId, { itemName: name, specification: '', unit: d?.unit ?? '' }) }}>
+                          <option value="">{it.category ? '請選擇物資名稱' : '請先選擇物資種類'}</option>
+                          {itemNamesFor(it.stockType, it.category).map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">規格</label>
+                        <select className="form-select" disabled={!it.itemName} value={it.specification} onChange={(e) => updateItem(it.logId, { specification: e.target.value })}>
+                          <option value="">{it.itemName ? '無（未指定，可稍後由總管補規格）' : '請先選擇物資名稱'}</option>
+                          {specsForItem(it).map((v) => <option key={v.id} value={v.specification ?? ''}>{v.specification}</option>)}
+                        </select>
+                      </div>
                       <ItemField label="數量" type="number" value={it.quantity} onChange={(v) => updateItem(it.logId, { quantity: v })} />
-                      <ItemField label="單位" value={it.unit} onChange={(v) => updateItem(it.logId, { unit: v })} />
+                      <div className="col-md-6">
+                        <label className="form-label">單位 *</label>
+                        <input className="form-control" disabled value={it.unit || defForItem(it)?.unit || ''} />
+                        <div className="form-text">依所選物資名稱自動帶入。</div>
+                      </div>
                       <div className="col-md-6">
                         <label className="form-label">庫存分類</label>
-                        <select className="form-select" value={it.stockType} onChange={(e) => updateItem(it.logId, { stockType: e.target.value })}>
+                        <select className="form-select" value={it.stockType} onChange={(e) => updateItem(it.logId, { stockType: e.target.value, category: '', itemName: '', specification: '', unit: '' })}>
                           {AllStockTypes.map((x) => <option key={x} value={x}>{stockTypeDisplayName(x)}</option>)}
                         </select>
                       </div>
