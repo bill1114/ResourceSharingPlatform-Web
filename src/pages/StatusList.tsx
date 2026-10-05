@@ -149,7 +149,13 @@ export function StatusList() {
   // 幫主對已過期的「向總管申請報廢」：沿用舉手（supply_request），type=disposal，指定批次。
   async function requestDisposal(row: Row) {
     if (row.id == null || row.locationId == null) return
-    if (!confirm(`向總管申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）？`)) return
+    // 請幫主填寫報廢原因，總管在「待處理需求 → 詳細」會看到。
+    const reason = prompt(
+      `向總管申請報廢「${row.item_name}」${row.quantity ?? ''} ${row.unit ?? ''}（已過期）。\n請填寫報廢原因（總管審核時會看到）：`,
+      '已過期'
+    )
+    if (reason === null) return // 取消
+    const note = reason.trim() || '已過期，申請報廢'
     const { error: insErr } = await supabase.from('supply_request').insert({
       request_type: 'disposal',
       supply_item_id: row.id,
@@ -159,7 +165,7 @@ export function StatusList() {
       requesting_location_id: row.locationId,
       quantity: row.quantity ?? 0,
       requested_by: profile?.display_name ?? profile?.username ?? null,
-      note: '已過期，申請報廢',
+      note,
       status: 'Open',
     })
     if (insErr) {

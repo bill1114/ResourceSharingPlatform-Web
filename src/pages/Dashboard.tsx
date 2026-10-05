@@ -58,6 +58,7 @@ export function Dashboard() {
   const [expiredCount, setExpiredCount] = useState(0)
   const [locationSummaries, setLocationSummaries] = useState<LocationSummary[]>([])
   const [requests, setRequests] = useState<SupplyRequest[]>([])
+  const [detailReq, setDetailReq] = useState<SupplyRequest | null>(null) // 待處理需求「詳細」彈窗（看原因/備註）
   const [loading, setLoading] = useState(true)
 
   async function load() {
@@ -317,6 +318,9 @@ export function Dashboard() {
                           <td className="col-min">{r.requested_by}</td>
                           <td className="col-min">
                             <div className="d-flex gap-1">
+                              <button className="btn btn-sm btn-outline-info" title="詳細資料（含原因/備註）" onClick={() => setDetailReq(r)}>
+                                <i className="bi bi-eye" /> 詳細
+                              </button>
                               {isDisposal ? (
                                 isAdmin ? (
                                   <>
@@ -358,6 +362,46 @@ export function Dashboard() {
       </div>
       )}
 
+      {/* 待處理需求詳細（看幫主填寫的原因/備註） */}
+      {detailReq && (
+        <div className="modal d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="bi bi-hand-index-thumb" /> 需求詳細
+                  {detailReq.request_type === 'disposal' && <span className="badge bg-dark ms-2">報廢申請</span>}
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setDetailReq(null)} />
+              </div>
+              <div className="modal-body">
+                <dl className="row mb-0">
+                  <dt className="col-4">品項</dt>
+                  <dd className="col-8">
+                    {detailReq.item_name}
+                    {detailReq.specification ? `／${detailReq.specification}` : ''}（{detailReq.category}）
+                  </dd>
+                  <dt className="col-4">數量</dt>
+                  <dd className="col-8">{detailReq.quantity}</dd>
+                  <dt className="col-4">需求據點</dt>
+                  <dd className="col-8">{locationName(detailReq.requesting_location_id)}</dd>
+                  <dt className="col-4">來源據點</dt>
+                  <dd className="col-8">{detailReq.source_location_id ? locationName(detailReq.source_location_id) : '—'}</dd>
+                  <dt className="col-4">提出人</dt>
+                  <dd className="col-8">{detailReq.requested_by ?? '—'}</dd>
+                  <dt className="col-4">提出時間</dt>
+                  <dd className="col-8">{new Date(detailReq.created_at).toLocaleDateString('zh-TW')}</dd>
+                  <dt className="col-4">{detailReq.request_type === 'disposal' ? '報廢原因' : '原因／備註'}</dt>
+                  <dd className="col-8">{detailReq.note?.trim() ? detailReq.note : <span className="text-muted">未填</span>}</dd>
+                </dl>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setDetailReq(null)}>關閉</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
