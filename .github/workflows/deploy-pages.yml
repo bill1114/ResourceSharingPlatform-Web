@@ -28,6 +28,8 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # 外部 AI 辨識服務（YOLO）網址；未設定此 Variable 時 AI 智慧入庫維持原本行為。
+          VITE_RECOGNITION_API_URL: ${{ vars.VITE_RECOGNITION_API_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

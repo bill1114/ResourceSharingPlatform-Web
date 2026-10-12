@@ -8,6 +8,7 @@ import { attachSharedAiPhoto } from '../lib/imageUpload'
 import { logActivity } from '../lib/activityLog'
 import { DateSelect } from '../components/DateSelect'
 import { FlashMessage } from '../components/FlashMessage'
+import { recognitionEnabled, recognizeViaVision } from '../lib/recognitionApi'
 import type { AIStockInLog, SupplyLocation, InventoryItemDefinition, InventoryItemVariant } from '../types/db'
 
 // 每一筆辨識結果（可編輯）；logId 對應各自的 ai_stock_in_log 列。
@@ -114,18 +115,34 @@ export function AIStockInCreate() {
       const { error } = await supabase.storage.from('ai-stockin').upload(uploadedPath, image)
       if (error) { setMessage({ ok: false, text: error.message }); setBusy(false); return }
     }
-    const { data, error } = await supabase.functions.invoke('ai-stockin-recognize', { body: { locationId, inputText, imagePath: uploadedPath } })
-    setBusy(false)
-    if (error || !data?.success) {
-      setMessage({ ok: false, text: data?.message ?? await functionErrorMessage(error, '辨識失敗') })
-      return
+    // 有設定外部 YOLO 辨識服務且本次是照片 → 走辨識服務；否則（純文字描述或未設定）維持原 Edge Function。
+    let data: { success?: boolean; message?: string; logs?: AIStockInLog[]; log?: AIStockInLog } | null = null
+    if (recognitionEnabled() && uploadedPath) {
+      try {
+        const r = await recognizeViaVision({ locationId, imagePath: uploadedPath })
+        data = { success: true, message: r.message, logs: (r.logs ?? []) as AIStockInLog[] }
+      } catch (e) {
+        setBusy(false)
+        setMessage({ ok: false, text: e instanceof Error ? e.message : '辨識失敗' })
+        return
+      }
+    } else {
+      const res = await supabase.functions.invoke('ai-stockin-recognize', { body: { locationId, inputText, imagePath: uploadedPath } })
+      if (res.error || !res.data?.success) {
+        setBusy(false)
+        setMessage({ ok: false, text: res.data?.message ?? await functionErrorMessage(res.error, '辨識失敗') })
+        return
+      }
+      data = res.data
     }
+    setBusy(false)
+    if (!data) { setMessage({ ok: false, text: '辨識失敗' }); return }
     // 後端已支援多品項：回傳 logs[]（每項一列 ai_stock_in_log），舊版只回 log。
     const logs: AIStockInLog[] = Array.isArray(data.logs) && data.logs.length ? data.logs : data.log ? [data.log] : []
     setItems(logs.map(toItem))
     setImagePath(uploadedPath ?? null)
     setImageUrl(image ? URL.createObjectURL(image) : null)
-    setMessage({ ok: true, text: data.message })
+    setMessage({ ok: true, text: data.message ?? '辨識完成' })
   }
 
   async function confirmAll(e: FormEvent) {
@@ -272,6 +289,11 @@ export function AIStockInCreate() {
           </div></div>
 
           <div className="card shadow-sm mb-4"><div className="card-header bg-light"><i className="bi bi-camera" /> 步驟二：辨識來源（文字或照片）</div><div className="card-body">
+            {recognitionEnabled() && (
+              <div className="alert alert-info py-2 small mb-3">
+                <i className="bi bi-robot" /> 照片辨識：YOLO 優先，低信心項目再送雲端複核；文字描述仍走原辨識。
+              </div>
+            )}
             <div className="mb-3">
               <label className="form-label">文字描述</label>
               <textarea className="form-control" rows={3} placeholder="例如：白米 10 包，每包 2 公斤，2027-01-01 到期；礦泉水 2 箱" value={inputText} onChange={(e) => setInputText(e.target.value)} />

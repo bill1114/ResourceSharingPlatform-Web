@@ -25,3 +25,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# AI 辨識服務原始包（勿入庫，體積大）
+加入YOLO_1010_V1.rar
+*.rar

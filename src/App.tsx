@@ -21,6 +21,7 @@ import { AnalyticsHub } from './pages/AnalyticsHub'
 import { AccountManagement } from './pages/AccountManagement'
 import { LineSettings, AISettings } from './pages/AdminSettings'
 import { LineBroadcast } from './pages/LineBroadcast'
+import { AIModels } from './pages/AIModels'
 import { AIStockInCreate, AIStockInIndex } from './pages/AIStockIn'
 import { EngineeringRoute } from './components/EngineeringRoute'
 import { MobileFeatures, MobileInventory, MobilePickup, MobileTransfer, MobileVision, MobileNoAccess } from './pages/MobileFeatures'
@@ -160,6 +161,14 @@ function App() {
           element={
             <RoleGate roles={[Roles.Admin]}>
               <AISettings />
+            </RoleGate>
+          }
+        />
+        <Route
+          path="/admin/ai-models"
+          element={
+            <RoleGate roles={[Roles.Admin]}>
+              <AIModels />
             </RoleGate>
           }
         />

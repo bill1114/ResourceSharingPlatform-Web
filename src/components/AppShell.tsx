@@ -216,6 +216,11 @@ export function AppShell() {
                           <i className="bi bi-stars" /> AI 智慧入庫設定
                         </NavLink>
                       </li>
+                      <li>
+                        <NavLink className="dropdown-item" to="/admin/ai-models">
+                          <i className="bi bi-robot" /> AI 模型管理
+                        </NavLink>
+                      </li>
                       <li><hr className="dropdown-divider" /></li>
                       <li>
                         <NavLink className="dropdown-item" to="/admin/activity-log">
